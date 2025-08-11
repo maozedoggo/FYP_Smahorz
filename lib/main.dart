@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:smart_horizon_home/login/login_page.dart'; // lowercase filename suggested
+import 'package:smart_horizon_home/views/pages/login/login_page.dart'; // lowercase filename suggested
 
 void main() {
   runApp(const SmartHomeApp());

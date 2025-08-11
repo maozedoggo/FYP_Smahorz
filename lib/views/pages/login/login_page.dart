@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:smart_horizon_home/signup/signup_page.dart'; // <-- correct import
+import 'package:smart_horizon_home/views/pages/signup/signup_page.dart'; // <-- correct import
 
 class LoginPage extends StatelessWidget {
   final TextEditingController emailController = TextEditingController();
@@ -31,6 +31,7 @@ class LoginPage extends StatelessWidget {
               onPressed: () {
                 print("Email: ${emailController.text}");
                 print("Password: ${passwordController.text}");
+                
               },
             ),
             const SizedBox(height: 10),
