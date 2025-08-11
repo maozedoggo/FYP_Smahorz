@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:smart_horizon_home/login_page.dart';
+import 'package:smart_horizon_home/login/login_page.dart'; // lowercase filename suggested
 
 void main() {
   runApp(const SmartHomeApp());
@@ -13,9 +13,8 @@ class SmartHomeApp extends StatelessWidget {
     return MaterialApp(
       theme: ThemeData(
         scaffoldBackgroundColor: const Color.fromARGB(213, 255, 255, 255),
-        
       ),
-      home: LoginPage()
+      home: LoginPage(),
     );
   }
 }
