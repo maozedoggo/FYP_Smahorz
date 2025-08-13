@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:smart_horizon_home/views/pages/signup/signup_page.dart'; // <-- correct import
+import 'package:smart_horizon_home/views/pages/signup/signup_page.dart';
 
 class LoginPage extends StatelessWidget {
-  final TextEditingController emailController = TextEditingController();
+  final TextEditingController loginIdController = TextEditingController(); // Can be email or username
   final TextEditingController passwordController = TextEditingController();
 
   LoginPage({super.key});
@@ -16,24 +16,51 @@ class LoginPage extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Email or Username field
             TextField(
-              controller: emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
+              controller: loginIdController,
+              decoration: const InputDecoration(labelText: 'Email or Username'),
             ),
+            const SizedBox(height: 12),
+            
+            // Password field
             TextField(
               controller: passwordController,
               obscureText: true,
               decoration: const InputDecoration(labelText: 'Password'),
             ),
             const SizedBox(height: 20),
+            
+            // Login button
             ElevatedButton(
               child: const Text('Login'),
               onPressed: () {
-                print("Email: ${emailController.text}");
-                print("Password: ${passwordController.text}");
-                
+                String loginId = loginIdController.text.trim();
+                String password = passwordController.text;
+
+                if (loginId.isEmpty || password.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Please fill in all fields")),
+                  );
+                  return;
+                }
+
+                // For now, just print the values — replace with actual auth check
+                print("Login ID (Email/Username): $loginId");
+                print("Password: $password");
+
+                // TODO: Replace with Firebase check:
+                // If loginId contains "@", treat as email, else treat as username
+                if (loginId.contains("@")) {
+                  print("Logging in with email");
+                  // check email in Firebase
+                } else {
+                  print("Logging in with username");
+                  // check username in Firebase
+                }
               },
             ),
+            
             const SizedBox(height: 10),
             TextButton(
               child: const Text("Don't have an account? Sign Up"),
@@ -41,8 +68,6 @@ class LoginPage extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const SignUpPage()),
-                  // If you want to use the SignUpPage from SignUp_page.dart, use:
-                  // MaterialPageRoute(builder: (context) => const signUp1.SignUpPage()),
                 );
               },
             ),
