@@ -67,7 +67,7 @@ class CreateAccountState extends State<CreateAccount> {
     // Go to Login
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
+      MaterialPageRoute(builder: (_) => LoginPage()),
       (route) => false,
     );
   }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:smart_horizon_home/views/pages/home_page.dart';
 import 'package:smart_horizon_home/views/pages/signup/signup_page.dart';
 
 class LoginPage extends StatelessWidget {
-  final TextEditingController loginIdController = TextEditingController(); // Can be email or username
+  final TextEditingController loginIdController =
+      TextEditingController(); // Can be email or username
   final TextEditingController passwordController = TextEditingController();
 
   LoginPage({super.key});
@@ -22,7 +24,7 @@ class LoginPage extends StatelessWidget {
               decoration: const InputDecoration(labelText: 'Email or Username'),
             ),
             const SizedBox(height: 12),
-            
+
             // Password field
             TextField(
               controller: passwordController,
@@ -30,7 +32,7 @@ class LoginPage extends StatelessWidget {
               decoration: const InputDecoration(labelText: 'Password'),
             ),
             const SizedBox(height: 20),
-            
+
             // Login button
             ElevatedButton(
               child: const Text('Login'),
@@ -57,10 +59,14 @@ class LoginPage extends StatelessWidget {
                 } else {
                   print("Logging in with username");
                   // check username in Firebase
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const HomePage()),
+                  );
                 }
               },
             ),
-            
+
             const SizedBox(height: 10),
             TextButton(
               child: const Text("Don't have an account? Sign Up"),
