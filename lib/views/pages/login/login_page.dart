@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:smart_horizon_home/views/pages/home_page.dart';
 import 'package:smart_horizon_home/views/pages/signup/signup_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -25,23 +27,50 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _login() async {
     if (loginIdController.text.isEmpty || passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter email & password')),
+        const SnackBar(content: Text('Please enter email/username & password')),
       );
       return;
     }
 
+    String loginInput = loginIdController.text.trim();
+    String password = passwordController.text.trim();
+    String emailToUse = loginInput;
+
     try {
+      // Check if input is a username (not email)
+      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(loginInput)) {
+        // Fetch email from Firestore using username
+        final querySnapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .where('username', isEqualTo: loginInput)
+            .get();
+
+        if (querySnapshot.docs.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No user found with this username')),
+          );
+          return;
+        }
+
+        emailToUse = querySnapshot.docs.first.get('email');
+      }
+
+      // Log in with email and password
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: loginIdController.text.trim(),
-        password: passwordController.text.trim(),
+        email: emailToUse,
+        password: password,
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Login successful!')),
       );
 
-      // TODO: Replace with your Home Page
-      
+      // Navigate to Home Page
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const HomePage()),
+      );
+
     } on FirebaseAuthException catch (e) {
       String message = 'Login failed';
       if (e.code == 'user-not-found') {
@@ -63,7 +92,7 @@ class _LoginPageState extends State<LoginPage> {
           children: [
             TextField(
               controller: loginIdController,
-              decoration: const InputDecoration(labelText: 'Email'),
+              decoration: const InputDecoration(labelText: 'Email or Username'),
             ),
             const SizedBox(height: 10),
             TextField(

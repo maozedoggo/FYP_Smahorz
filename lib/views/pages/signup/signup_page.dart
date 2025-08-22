@@ -1,7 +1,6 @@
-// ignore_for_file: file_names, depend_on_referenced_packages
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; //FOR DATE
+import 'package:intl/intl.dart'; // For Date
 import 'package:smart_horizon_home/views/pages/create_account_page/create_account.dart';
 
 class SignUpPage extends StatefulWidget {
@@ -169,15 +168,22 @@ class _SignUpPageState extends State<SignUpPage> {
     }
 
     Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CreateAccount(
-          name: nameController.text,
-          phone: '$selectedCountryCode ${phoneController.text}',
-          email: emailController.text,
-        ),
-      ),
-    );
+  context,
+  MaterialPageRoute(
+    builder: (context) => CreateAccount(
+      name: nameController.text,
+      phone: '$selectedCountryCode ${phoneController.text}',
+      email: emailController.text,
+      addressLine1: addressLine1Controller.text,
+      addressLine2: addressLine2Controller.text,
+      postalCode: postalCodeController.text,
+      state: selectedState!,
+      country: selectedCountry!,
+      dob: selectedDOB!,
+    ),
+  ),
+);
+
   }
 
   @override
@@ -299,3 +305,4 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 }
+
