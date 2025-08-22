@@ -1,83 +1,93 @@
 import 'package:flutter/material.dart';
-import 'package:smart_horizon_home/views/pages/home_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:smart_horizon_home/views/pages/signup/signup_page.dart';
 
-class LoginPage extends StatelessWidget {
-  final TextEditingController loginIdController =
-      TextEditingController(); // Can be email or username
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final TextEditingController loginIdController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
-  LoginPage({super.key});
+  bool showPassword = false;
+
+  @override
+  void dispose() {
+    loginIdController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    if (loginIdController.text.isEmpty || passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter email & password')),
+      );
+      return;
+    }
+
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: loginIdController.text.trim(),
+        password: passwordController.text.trim(),
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Login successful!')),
+      );
+
+      // TODO: Replace with your Home Page
+      
+    } on FirebaseAuthException catch (e) {
+      String message = 'Login failed';
+      if (e.code == 'user-not-found') {
+        message = 'No user found with this email';
+      } else if (e.code == 'wrong-password') {
+        message = 'Wrong password';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Login')),
       body: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(20),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Email or Username field
             TextField(
               controller: loginIdController,
-              decoration: const InputDecoration(labelText: 'Email or Username'),
+              decoration: const InputDecoration(labelText: 'Email'),
             ),
-            const SizedBox(height: 12),
-
-            // Password field
+            const SizedBox(height: 10),
             TextField(
               controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
+              obscureText: !showPassword,
+              decoration: InputDecoration(
+                labelText: 'Password',
+                suffixIcon: IconButton(
+                  icon: Icon(showPassword ? Icons.visibility : Icons.visibility_off),
+                  onPressed: () => setState(() => showPassword = !showPassword),
+                ),
+              ),
             ),
             const SizedBox(height: 20),
-
-            // Login button
             ElevatedButton(
+              onPressed: _login,
               child: const Text('Login'),
-              onPressed: () {
-                String loginId = loginIdController.text.trim();
-                String password = passwordController.text;
-
-                if (loginId.isEmpty || password.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Please fill in all fields")),
-                  );
-                  return;
-                }
-
-                // For now, just print the values — replace with actual auth check
-                print("Login ID (Email/Username): $loginId");
-                print("Password: $password");
-
-                // TODO: Replace with Firebase check:
-
-                
-                // If loginId contains "@", treat as email, else treat as username
-                if (loginId.contains("@")) {
-                  print("Logging in with email");
-                  // check email in Firebase
-                } else {
-                  print("Logging in with username");
-                  // check username in Firebase
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const HomePage()),
-                  );
-                }
-              },
             ),
-
-            const SizedBox(height: 10),
             TextButton(
-              child: const Text("Don't have an account? Sign Up"),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SignUpPage()),
-                );
-              },
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SignUpPage()),
+              ),
+              child: const Text('Don’t have an account? Sign Up'),
             ),
           ],
         ),
