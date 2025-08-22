@@ -52,6 +52,8 @@ class LoginPage extends StatelessWidget {
                 print("Password: $password");
 
                 // TODO: Replace with Firebase check:
+
+                
                 // If loginId contains "@", treat as email, else treat as username
                 if (loginId.contains("@")) {
                   print("Logging in with email");

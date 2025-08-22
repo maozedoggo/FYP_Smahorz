@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:smart_horizon_home/views/pages/login/login_page.dart';
 
 class CreateAccount extends StatefulWidget {
@@ -33,7 +35,7 @@ class CreateAccountState extends State<CreateAccount> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (usernameController.text.isEmpty ||
         passwordController.text.isEmpty ||
         confirmPasswordController.text.isEmpty) {
@@ -57,19 +59,41 @@ class CreateAccountState extends State<CreateAccount> {
       return;
     }
 
-    // TODO: add backend/Firebase signup
+    try {
+      // 1. Create Firebase Authentication account
+      UserCredential userCredential =
+          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: widget.email,
+        password: passwordController.text.trim(),
+      );
 
+      // 2. Save user profile in Firestore
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
+        'uid': userCredential.user!.uid,
+        'name': widget.name,
+        'phone': widget.phone,
+        'email': widget.email,
+        'username': usernameController.text.trim(),
+        'createdAt': DateTime.now(),
+      });
 
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Account created successfully!')),
+      );
 
-
-
-
-    // Go to Login
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => LoginPage()),
-      (route) => false,
-    );
+      // 3. Go back to Login
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (e) {
+      String message = 'Error: ${e.message}';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   @override
@@ -79,7 +103,7 @@ class CreateAccountState extends State<CreateAccount> {
         title: const Text('Create Account'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context), // back to Sign Up
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: SingleChildScrollView(
@@ -87,19 +111,18 @@ class CreateAccountState extends State<CreateAccount> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // (Optional) show carried-over info
             Text('Name: ${widget.name}'),
             Text('Phone: ${widget.phone}'),
             Text('Email: ${widget.email}'),
             const SizedBox(height: 16),
 
-            TextFormField(
+            TextField(
               controller: usernameController,
               decoration: const InputDecoration(labelText: 'Username'),
             ),
             const SizedBox(height: 10),
 
-            TextFormField(
+            TextField(
               controller: passwordController,
               obscureText: !showPassword,
               decoration: InputDecoration(
@@ -112,7 +135,7 @@ class CreateAccountState extends State<CreateAccount> {
             ),
             const SizedBox(height: 10),
 
-            TextFormField(
+            TextField(
               controller: confirmPasswordController,
               obscureText: !showConfirm,
               decoration: InputDecoration(
