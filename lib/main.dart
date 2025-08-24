@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:smart_horizon_home/views/pages/login/login_page.dart'; // lowercase filename suggested
+import 'package:firebase_core/firebase_core.dart';
+import 'package:smart_horizon_home/views/pages/login/login_page.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(); //Initialize Firebase
   runApp(const SmartHomeApp());
 }
 
@@ -11,6 +14,7 @@ class SmartHomeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: const Color.fromARGB(213, 255, 255, 255),
       ),

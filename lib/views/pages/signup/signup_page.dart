@@ -1,7 +1,7 @@
-// ignore_for_file: file_names, depend_on_referenced_packages
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';  // For formatting date
+import 'package:intl/intl.dart'; // For Date
+import 'package:smart_horizon_home/views/pages/create_account_page/create_account.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -11,7 +11,7 @@ class SignUpPage extends StatefulWidget {
 }
 
 class _SignUpPageState extends State<SignUpPage> {
-
+  // Controllers
   final TextEditingController nameController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
@@ -19,19 +19,14 @@ class _SignUpPageState extends State<SignUpPage> {
   final TextEditingController addressLine2Controller = TextEditingController();
   final TextEditingController postalCodeController = TextEditingController();
 
-  String? selectedCountryCode = '+60'; // Default Malaysia country code
+  // State
+  String selectedCountryCode = '+60';
   String? selectedCountry;
   String? selectedState;
   DateTime? selectedDOB;
 
-  final List<String> countryCodes = [
-    '+60', // Malaysia
-    '+1',  // USA
-    '+44', // UK
-    '+61', // Australia
-    '+91', // India
-    '+65', // Singapore
-  ];
+  // Lists
+  final List<String> countryCodes = ['+60', '+1', '+44', '+61', '+91', '+65'];
 
   final List<String> countries = [
     'Malaysia',
@@ -73,7 +68,7 @@ class _SignUpPageState extends State<SignUpPage> {
     super.dispose();
   }
 
-  // Name validation: only letters, min 8, max 40
+  // ===== Validation =====
   String? _validateName(String? value) {
     if (value == null || value.isEmpty) return 'Please enter your name';
     if (value.length < 8) return 'Name must be at least 8 characters';
@@ -83,19 +78,17 @@ class _SignUpPageState extends State<SignUpPage> {
     return null;
   }
 
-  // Phone validation: non empty, digits only
   String? _validatePhone(String? value) {
     if (value == null || value.isEmpty) return 'Please enter your phone number';
-    final validPhone = RegExp(r'^\d+$');
-    if (!validPhone.hasMatch(value)) return 'Phone number can only contain digits';
+    if (!RegExp(r'^\d+$').hasMatch(value)) return 'Phone number can only contain digits';
     return null;
   }
 
-  // Email validation using regex
   String? _validateEmail(String? value) {
     if (value == null || value.isEmpty) return 'Please enter your email';
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-    if (!emailRegex.hasMatch(value)) return 'Enter a valid email address';
+    if (!RegExp(r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,4}$').hasMatch(value)) {
+      return 'Enter a valid email address';
+    }
     return null;
   }
 
@@ -106,8 +99,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
   String? _validatePostalCode(String? value) {
     if (value == null || value.isEmpty) return 'Please enter your postal code';
-    final postalRegex = RegExp(r'^\d{3,10}$');
-    if (!postalRegex.hasMatch(value)) return 'Enter a valid postal code';
+    if (!RegExp(r'^\d{3,10}$').hasMatch(value)) return 'Enter a valid postal code';
     return null;
   }
 
@@ -127,22 +119,20 @@ class _SignUpPageState extends State<SignUpPage> {
     return null;
   }
 
+  // ===== Date Picker =====
   Future<void> _pickDateOfBirth() async {
-    final initialDate = DateTime.now().subtract(const Duration(days: 365 * 20)); // 20 years ago
+    final initialDate = DateTime.now().subtract(const Duration(days: 365 * 20));
     final newDate = await showDatePicker(
       context: context,
       initialDate: selectedDOB ?? initialDate,
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
     );
-    if (newDate != null) {
-      setState(() {
-        selectedDOB = newDate;
-      });
-    }
+    if (newDate != null) setState(() => selectedDOB = newDate);
   }
 
-  void _submit() {
+  // ===== Next Action =====
+  void createaccount() {
     final nameError = _validateName(nameController.text);
     final phoneError = _validatePhone(phoneController.text);
     final emailError = _validateEmail(emailController.text);
@@ -160,46 +150,47 @@ class _SignUpPageState extends State<SignUpPage> {
         countryError != null ||
         stateError != null ||
         dobError != null) {
-      // Show errors via snackbar or form
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             nameError ??
-            phoneError ??
-            emailError ??
-            addrError ??
-            postalError ??
-            countryError ??
-            stateError ??
-            dobError!,
+                phoneError ??
+                emailError ??
+                addrError ??
+                postalError ??
+                countryError ??
+                stateError ??
+                dobError!,
           ),
         ),
       );
       return;
     }
 
-    // All good, print info and show success
-    print('Sign Up Info:');
-    print('Name: ${nameController.text}');
-    print('Phone: $selectedCountryCode ${phoneController.text}');
-    print('Email: ${emailController.text}');
-    print('Address Line 1: ${addressLine1Controller.text}');
-    print('Address Line 2: ${addressLine2Controller.text}');
-    print('State: $selectedState');
-    print('Postal Code: ${postalCodeController.text}');
-    print('Country: $selectedCountry');
-    print('Date of Birth: ${DateFormat('yyyy-MM-dd').format(selectedDOB!)}');
+    Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (context) => CreateAccount(
+      name: nameController.text,
+      phone: '$selectedCountryCode ${phoneController.text}',
+      email: emailController.text,
+      addressLine1: addressLine1Controller.text,
+      addressLine2: addressLine2Controller.text,
+      postalCode: postalCodeController.text,
+      state: selectedState!,
+      country: selectedCountry!,
+      dob: selectedDOB!,
+    ),
+  ),
+);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sign Up Successful!')),
-    );
-
-    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    final dobText = selectedDOB == null ? 'Select Date of Birth' : DateFormat('yyyy-MM-dd').format(selectedDOB!);
+    final dobText = selectedDOB == null
+        ? 'Select Date of Birth'
+        : DateFormat('yyyy-MM-dd').format(selectedDOB!);
 
     return Scaffold(
       appBar: AppBar(
@@ -218,22 +209,15 @@ class _SignUpPageState extends State<SignUpPage> {
             ),
             const SizedBox(height: 8),
 
-            // Phone number with country code dropdown
+            // Phone
             Row(
               children: [
                 DropdownButton<String>(
                   value: selectedCountryCode,
                   items: countryCodes
-                      .map((code) => DropdownMenuItem(
-                            value: code,
-                            child: Text(code),
-                          ))
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                       .toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      selectedCountryCode = value;
-                    });
-                  },
+                  onChanged: (v) => setState(() => selectedCountryCode = v ?? '+60'),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -255,35 +239,30 @@ class _SignUpPageState extends State<SignUpPage> {
             ),
             const SizedBox(height: 8),
 
-            // Address Line 1
+            // Address 1
             TextFormField(
               controller: addressLine1Controller,
               decoration: const InputDecoration(labelText: 'Address Line 1'),
             ),
             const SizedBox(height: 8),
 
-            // Address Line 2 (optional)
+            // Address 2
             TextFormField(
               controller: addressLine2Controller,
-              decoration: const InputDecoration(labelText: 'Address Line 2 (Optional)'),
+              decoration: const InputDecoration(
+                labelText: 'Address Line 2 (Optional)',
+              ),
             ),
             const SizedBox(height: 8),
 
-            // State dropdown (Malaysia states)
+            // State
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: 'State'),
               value: selectedState,
               items: malaysianStates
-                  .map((state) => DropdownMenuItem(
-                        value: state,
-                        child: Text(state),
-                      ))
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                   .toList(),
-              onChanged: (value) {
-                setState(() {
-                  selectedState = value;
-                });
-              },
+              onChanged: (v) => setState(() => selectedState = v),
             ),
             const SizedBox(height: 8),
 
@@ -295,41 +274,30 @@ class _SignUpPageState extends State<SignUpPage> {
             ),
             const SizedBox(height: 8),
 
-            // Country dropdown (general countries list)
+            // Country
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: 'Country'),
               value: selectedCountry,
               items: countries
-                  .map((country) => DropdownMenuItem(
-                        value: country,
-                        child: Text(country),
-                      ))
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                   .toList(),
-              onChanged: (value) {
-                setState(() {
-                  selectedCountry = value;
-                });
-              },
+              onChanged: (v) => setState(() => selectedCountry = v),
             ),
             const SizedBox(height: 16),
 
-            // Date of Birth picker
+            // DOB
             Row(
               children: [
-                Expanded(
-                  child: Text('Date of Birth: $dobText'),
-                ),
-                TextButton(
-                  onPressed: _pickDateOfBirth,
-                  child: const Text('Select'),
-                ),
+                Expanded(child: Text('Date of Birth: $dobText')),
+                TextButton(onPressed: _pickDateOfBirth, child: const Text('Select')),
               ],
             ),
             const SizedBox(height: 30),
 
+            // Next
             ElevatedButton(
-              onPressed: _submit,
-              child: const Text('Sign Up'),
+              onPressed: createaccount,
+              child: const Text('Next'),
             ),
           ],
         ),
@@ -337,3 +305,4 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 }
+
