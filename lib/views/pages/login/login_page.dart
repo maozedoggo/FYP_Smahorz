@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:smart_horizon_home/views/pages/forgot_password/forgot_password.dart';
 import 'package:smart_horizon_home/views/pages/home_page.dart';
 import 'package:smart_horizon_home/views/pages/signup/signup_page.dart';
 
@@ -107,25 +108,18 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
             // Forgot Password button 
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
+            TextButton(
                 onPressed: () {
                   // Navigate to Forgot Password page
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => Scaffold(
-                        appBar: AppBar(title: const Text('Forgot Password')),
-                        body: const Center(
-                        ),
-                      ),
+                      builder: (_) => ForgotPasswordPage(),
                     ),
                   );
                 },
                 child: const Text('Forgot Password?'),
               ),
-            ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _login,
