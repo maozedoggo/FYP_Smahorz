@@ -106,6 +106,26 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
             ),
+            // Forgot Password button 
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () {
+                  // Navigate to Forgot Password page
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(title: const Text('Forgot Password')),
+                        body: const Center(
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Forgot Password?'),
+              ),
+            ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _login,
