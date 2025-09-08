@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:smart_horizon_home/ui/view_devices.dart';
-import 'package:smart_horizon_home/views/pages/smart-devices/clothe-hanger.dart';
-import 'package:smart_horizon_home/views/pages/smart-devices/parcel-back.dart';
-import 'package:smart_horizon_home/views/pages/smart-devices/parcel-front.dart';
+import 'package:smart_horizon_home/views/pages/smart-devices/clothe_hanger.dart';
+import 'package:smart_horizon_home/views/pages/smart-devices/parcel_inside.dart';
+import 'package:smart_horizon_home/views/pages/smart-devices/parcel_outside.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -52,9 +53,7 @@ class _HomePageState extends State<HomePage> {
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Icon(Icons.menu, size: 35, color: Colors.grey[800]),
-                ],
+                children: [Icon(Icons.menu, size: 35, color: Colors.grey[800])],
               ),
             ),
 
@@ -81,11 +80,73 @@ class _HomePageState extends State<HomePage> {
               child: Divider(thickness: 4),
             ),
 
-            // Smart devices grid
+            // Weather UI - Reduced vertical padding
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: 15, // Reduced from 15
+              ),
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Weather Icon
+                    Icon(Icons.cloud, size: 60),
+
+                    // Temperature
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text("Cloudy", style: TextStyle(fontSize: 20)),
+                        Text(
+                          "30C",
+                          style: TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Location (constrained so it won’t overflow)
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: 120,
+                      ), // tweak width to your liking
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text("Bangi,", style: TextStyle(fontSize: 20)),
+                          Text(
+                            "Selangor",
+                            style: TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Smart devices grid - Reduced vertical padding
             Expanded(
               child: GridView.builder(
                 physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(25),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 25,
+                ), // Reduced vertical padding
                 itemCount: smartDevices.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
