@@ -1,4 +1,3 @@
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -21,28 +20,25 @@ class ViewDevices extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(15.0),
+      padding: const EdgeInsets.all(15),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.grey[200],
           borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
-          padding: EdgeInsetsGeometry.symmetric(
-            vertical: 15,
-          ),
+          padding: EdgeInsetsGeometry.symmetric(vertical: 15),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-
               //Type of Devices
-              Text(deviceType),
+              Text(
+                deviceType,
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+              ),
 
               //Icons
-              Image.asset(
-                iconPath,
-                height: 65,
-              ),
+              Image.asset(iconPath, height: 65),
 
               //Part of Devices
               Padding(
@@ -50,23 +46,19 @@ class ViewDevices extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                        child: Text(
-                          devicePart,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                          ),
+                      child: Text(
+                        devicePart,
+                        style: TextStyle(
+                          fontWeight: FontWeight.normal,
+                          fontSize: 15,
                         ),
                       ),
-                  
-                    CupertinoSwitch(
-                      value: status, 
-                      onChanged: onChanged
-                    
-                    )
+                    ),
+
+                    CupertinoSwitch(value: status, onChanged: onChanged),
                   ],
                 ),
-              )
+              ),
             ],
           ),
         ),
