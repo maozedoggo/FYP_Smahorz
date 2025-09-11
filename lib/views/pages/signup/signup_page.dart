@@ -1,7 +1,7 @@
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; // For Date
 import 'package:smart_horizon_home/views/pages/create_account_page/create_account.dart';
+import 'package:smart_horizon_home/views/pages/login/login_page.dart'; 
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -18,6 +18,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final TextEditingController addressLine1Controller = TextEditingController();
   final TextEditingController addressLine2Controller = TextEditingController();
   final TextEditingController postalCodeController = TextEditingController();
+  final TextEditingController countryController = TextEditingController();
 
   // State
   String selectedCountryCode = '+60';
@@ -27,16 +28,6 @@ class _SignUpPageState extends State<SignUpPage> {
 
   // Lists
   final List<String> countryCodes = ['+60', '+1', '+44', '+61', '+91', '+65'];
-
-  final List<String> countries = [
-    'Malaysia',
-    'United States',
-    'United Kingdom',
-    'Canada',
-    'Australia',
-    'India',
-    'Singapore',
-  ];
 
   final List<String> malaysianStates = [
     'Johor',
@@ -65,6 +56,7 @@ class _SignUpPageState extends State<SignUpPage> {
     addressLine1Controller.dispose();
     addressLine2Controller.dispose();
     postalCodeController.dispose();
+    countryController.dispose();
     super.dispose();
   }
 
@@ -104,7 +96,7 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   String? _validateCountry(String? value) {
-    if (value == null || value.isEmpty) return 'Please select your country';
+    if (value == null || value.isEmpty) return 'Please enter your country';
     return null;
   }
 
@@ -138,7 +130,7 @@ class _SignUpPageState extends State<SignUpPage> {
     final emailError = _validateEmail(emailController.text);
     final addrError = _validateAddressLine1(addressLine1Controller.text);
     final postalError = _validatePostalCode(postalCodeController.text);
-    final countryError = _validateCountry(selectedCountry);
+    final countryError = _validateCountry(countryController.text);
     final stateError = _validateState(selectedState);
     final dobError = _validateDOB(selectedDOB);
 
@@ -167,23 +159,24 @@ class _SignUpPageState extends State<SignUpPage> {
       return;
     }
 
-    Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (context) => CreateAccount(
-      name: nameController.text,
-      phone: '$selectedCountryCode ${phoneController.text}',
-      email: emailController.text,
-      addressLine1: addressLine1Controller.text,
-      addressLine2: addressLine2Controller.text,
-      postalCode: postalCodeController.text,
-      state: selectedState!,
-      country: selectedCountry!,
-      dob: selectedDOB!,
-    ),
-  ),
-);
+    selectedCountry = countryController.text;
 
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateAccount(
+          name: nameController.text,
+          phone: '$selectedCountryCode ${phoneController.text}',
+          email: emailController.text,
+          addressLine1: addressLine1Controller.text,
+          addressLine2: addressLine2Controller.text,
+          postalCode: postalCodeController.text,
+          state: selectedState!,
+          country: selectedCountry!,
+          dob: selectedDOB!,
+        ),
+      ),
+    );
   }
 
   @override
@@ -194,115 +187,219 @@ class _SignUpPageState extends State<SignUpPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sign Up'),
-        leading: const BackButton(),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () {
+            // Explicitly navigate to LoginPage
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const LoginPage()),
+            );
+          },
+        ),
+        title: const Text('', style: TextStyle(color: Colors.black)),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            // Name
-            TextFormField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Name'),
-              maxLength: 40,
-            ),
-            const SizedBox(height: 8),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 20),
 
-            // Phone
-            Row(
-              children: [
-                DropdownButton<String>(
-                  value: selectedCountryCode,
-                  items: countryCodes
-                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                      .toList(),
-                  onChanged: (v) => setState(() => selectedCountryCode = v ?? '+60'),
+              // SIGN UP title
+              const Text(
+                "SIGN UP",
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: phoneController,
-                    decoration: const InputDecoration(labelText: 'Phone Number'),
-                    keyboardType: TextInputType.phone,
+              ),
+
+              const SizedBox(height: 40),
+
+              // Name
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text("NAME", style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  hintText: "Full Name",
+                  border: OutlineInputBorder(),
+                ),
+                maxLength: 40,
+              ),
+              const SizedBox(height: 16),
+
+              // Phone
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text("PHONE", style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  DropdownButton<String>(
+                    value: selectedCountryCode,
+                    items: countryCodes
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (v) => setState(() => selectedCountryCode = v ?? '+60'),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: phoneController,
+                      decoration: const InputDecoration(
+                        hintText: "Phone Number",
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.phone,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Email
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text("EMAIL", style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(
+                  hintText: "Email Address",
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 16),
+
+              // Address Line 1
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text("ADDRESS LINE 1", style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: addressLine1Controller,
+                decoration: const InputDecoration(
+                  hintText: "Address Line 1",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Address Line 2
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text("ADDRESS LINE 2 (OPTIONAL)", style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: addressLine2Controller,
+                decoration: const InputDecoration(
+                  hintText: "Address Line 2",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // State
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text("STATE", style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: "Select State",
+                ),
+                value: selectedState,
+                items: malaysianStates
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .toList(),
+                onChanged: (v) => setState(() => selectedState = v),
+              ),
+              const SizedBox(height: 16),
+
+              // Postal Code
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text("POSTAL CODE", style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: postalCodeController,
+                decoration: const InputDecoration(
+                  hintText: "Postal Code",
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+
+              // Country
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text("COUNTRY", style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: countryController,
+                decoration: const InputDecoration(
+                  hintText: "Country",
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (value) => setState(() => selectedCountry = value),
+              ),
+              const SizedBox(height: 16),
+
+              // DOB
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text("DATE OF BIRTH", style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(child: Text(dobText)),
+                  TextButton(onPressed: _pickDateOfBirth, child: const Text('Select')),
+                ],
+              ),
+
+              const SizedBox(height: 30),
+
+              // Next Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: createaccount,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.redAccent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'Next',
+                    style: TextStyle(fontSize: 16, color: Colors.white),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Email
-            TextFormField(
-              controller: emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 8),
-
-            // Address 1
-            TextFormField(
-              controller: addressLine1Controller,
-              decoration: const InputDecoration(labelText: 'Address Line 1'),
-            ),
-            const SizedBox(height: 8),
-
-            // Address 2
-            TextFormField(
-              controller: addressLine2Controller,
-              decoration: const InputDecoration(
-                labelText: 'Address Line 2 (Optional)',
               ),
-            ),
-            const SizedBox(height: 8),
-
-            // State
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: 'State'),
-              value: selectedState,
-              items: malaysianStates
-                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                  .toList(),
-              onChanged: (v) => setState(() => selectedState = v),
-            ),
-            const SizedBox(height: 8),
-
-            // Postal Code
-            TextFormField(
-              controller: postalCodeController,
-              decoration: const InputDecoration(labelText: 'Postal Code'),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 8),
-
-            // Country
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: 'Country'),
-              value: selectedCountry,
-              items: countries
-                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                  .toList(),
-              onChanged: (v) => setState(() => selectedCountry = v),
-            ),
-            const SizedBox(height: 16),
-
-            // DOB
-            Row(
-              children: [
-                Expanded(child: Text('Date of Birth: $dobText')),
-                TextButton(onPressed: _pickDateOfBirth, child: const Text('Select')),
-              ],
-            ),
-            const SizedBox(height: 30),
-
-            // Next
-            ElevatedButton(
-              onPressed: createaccount,
-              child: const Text('Next'),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
-

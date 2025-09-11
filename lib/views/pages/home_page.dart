@@ -3,9 +3,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:smart_horizon_home/services/weather_services.dart';
 import 'package:smart_horizon_home/ui/view_devices.dart';
+
 import 'package:smart_horizon_home/views/pages/smart-devices/clothe_hanger.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/parcel_inside.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/parcel_outside.dart';
+
+// import 'package:smart_horizon_home/views/pages/profile/profile_page.dart';
+import 'package:smart_horizon_home/views/pages/profile-page/profile_page.dart';
+// Make sure that the file 'profile_page.dart' defines a class named 'ProfilePage'
+import 'package:smart_horizon_home/views/pages/settings-page/settings_page.dart';
+import 'package:smart_horizon_home/views/pages/login/login_page.dart';
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,6 +23,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  
   // Access weather service class
   final WeatherService weatherAPI = WeatherService();
 
@@ -24,10 +33,12 @@ class _HomePageState extends State<HomePage> {
 
   // List of Smart Devices [Name, Part, Icon, Status]
   final List<List<dynamic>> smartDevices = [
+
     ["Parcel Box", "Outside", "lib/icons/door-open.png", true],
     ["Parcel Box", "Inside", "lib/icons/door-open.png", true],
     ["Cloth Hanger", "", "lib/icons/drying-rack.png", true],
   ];
+
 
   // List of corresponding pages (same order as smartDevices)
   final List<Widget> devicePages = const [
@@ -74,6 +85,60 @@ class _HomePageState extends State<HomePage> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            const DrawerHeader(
+              decoration: BoxDecoration(color: Colors.blueGrey),
+              child: Text(
+                'Menu',
+                style: TextStyle(color: Colors.white, fontSize: 24),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Profile'),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfilePage()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.devices),
+              title: const Text('Devices'),
+              onTap: () {
+                Navigator.pop(context); // Already on HomePage
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Settings'),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SettingsPage()),
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
+              onTap: () {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                  (route) => false,
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -85,14 +150,22 @@ class _HomePageState extends State<HomePage> {
                 vertical: verticalPadding,
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [Icon(Icons.menu, size: 35, color: Colors.grey[800])],
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  Builder(
+                    builder: (context) => IconButton(
+                      icon: const Icon(Icons.menu, size: 35, color: Colors.black),
+                      onPressed: () => Scaffold.of(context).openDrawer(),
+                    ),
+                  ),
+                ],
               ),
             ),
 
             const SizedBox(height: 20),
 
-            // Welcome bar and user name
+
+            // Welcome bar
             Padding(
               padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
               child: Column(

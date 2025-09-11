@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:smart_horizon_home/views/pages/login/login_page.dart';
+import 'package:smart_horizon_home/views/pages/signup/signup_page.dart';
+
 
 class CreateAccount extends StatefulWidget {
   final String name;
@@ -47,27 +49,56 @@ class CreateAccountState extends State<CreateAccount> {
     super.dispose();
   }
 
+  // ===== Password Validation =====
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) return 'Please enter your password';
+    if (value.length < 8) return 'Password must be at least 8 characters';
+
+    final hasUppercase = RegExp(r'[A-Z]');
+    final hasLowercase = RegExp(r'[a-z]');
+    final hasSpecial = RegExp(r'[!@#$%^&*(),.?":{}|<>]');
+
+    if (!hasUppercase.hasMatch(value)) return 'Must contain at least 1 uppercase letter';
+    if (!hasLowercase.hasMatch(value)) return 'Must contain at least 1 lowercase letter';
+    if (!hasSpecial.hasMatch(value)) return 'Must contain at least 1 special character';
+
+    return null;
+  }
+
+  // ===== Pop-up Dialog =====
+  Future<void> _showPopup(String title, String message) {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
+    final passwordError = _validatePassword(passwordController.text);
+
     if (usernameController.text.isEmpty ||
         passwordController.text.isEmpty ||
         confirmPasswordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields')),
-      );
+      _showPopup('Error', 'Please fill all fields');
       return;
     }
 
-    if (passwordController.text.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters')),
-      );
+    if (passwordError != null) {
+      _showPopup('Error', passwordError);
       return;
     }
 
     if (passwordController.text != confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match')),
-      );
+      _showPopup('Error', 'Passwords do not match');
       return;
     }
 
@@ -79,7 +110,7 @@ class CreateAccountState extends State<CreateAccount> {
         password: passwordController.text.trim(),
       );
 
-      // 2. Save user profile in Firestore with all fields
+      // 2. Save user profile in Firestore
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
@@ -98,19 +129,17 @@ class CreateAccountState extends State<CreateAccount> {
         'createdAt': DateTime.now(),
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Account created successfully!')),
-      );
+      // 3. Show success popup
+      await _showPopup('Success', 'Account created successfully!');
 
-      // 3. Go back to Login
+      // 4. Redirect to LoginPage
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const LoginPage()),
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      String message = 'Error: ${e.message}';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      _showPopup('Error', e.message ?? 'Something went wrong');
     }
   }
 
@@ -118,65 +147,119 @@ class CreateAccountState extends State<CreateAccount> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create Account'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () {
+            // Navigate back to SignUpPage
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const SignUpPage()),
+            );
+          },
+        ),
+        title: const Text(
+          '',
+          style: TextStyle(color: Colors.black),
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Name: ${widget.name}'),
-            Text('Phone: ${widget.phone}'),
-            Text('Email: ${widget.email}'),
-            Text('Address Line 1: ${widget.addressLine1}'),
-            Text('Address Line 2: ${widget.addressLine2}'),
-            Text('Postal Code: ${widget.postalCode}'),
-            Text('State: ${widget.state}'),
-            Text('Country: ${widget.country}'),
-            Text('Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}'),
-            const SizedBox(height: 16),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 20), // spacing after AppBar
 
-            TextField(
-              controller: usernameController,
-              decoration: const InputDecoration(labelText: 'Username'),
-            ),
-            const SizedBox(height: 10),
+              // Title
+              const Text(
+                "CREATE ACCOUNT",
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 30),
 
-            TextField(
-              controller: passwordController,
-              obscureText: !showPassword,
-              decoration: InputDecoration(
-                labelText: 'Password',
-                suffixIcon: IconButton(
-                  icon: Icon(showPassword ? Icons.visibility : Icons.visibility_off),
-                  onPressed: () => setState(() => showPassword = !showPassword),
+              // User info summary
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Name: ${widget.name}"),
+                    Text("Phone: ${widget.phone}"),
+                    Text("Email: ${widget.email}"),
+                    Text("Address Line 1: ${widget.addressLine1}"),
+                    Text("Address Line 2: ${widget.addressLine2}"),
+                    Text("Postal Code: ${widget.postalCode}"),
+                    Text("State: ${widget.state}"),
+                    Text("Country: ${widget.country}"),
+                    Text("Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}"),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
+              const SizedBox(height: 30),
 
-            TextField(
-              controller: confirmPasswordController,
-              obscureText: !showConfirm,
-              decoration: InputDecoration(
-                labelText: 'Confirm Password',
-                suffixIcon: IconButton(
-                  icon: Icon(showConfirm ? Icons.visibility : Icons.visibility_off),
-                  onPressed: () => setState(() => showConfirm = !showConfirm),
+              // Username
+              TextField(
+                controller: usernameController,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  border: OutlineInputBorder(),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
-            ElevatedButton(
-              onPressed: _submit,
-              child: const Text('Create Account'),
-            ),
-          ],
+              // Password
+              TextField(
+                controller: passwordController,
+                obscureText: !showPassword,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(showPassword ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => showPassword = !showPassword),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Confirm Password
+              TextField(
+                controller: confirmPasswordController,
+                obscureText: !showConfirm,
+                decoration: InputDecoration(
+                  labelText: 'Confirm Password',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(showConfirm ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => showConfirm = !showConfirm),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 30),
+
+              // Create Account button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _submit,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.redAccent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    "Create Account",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
