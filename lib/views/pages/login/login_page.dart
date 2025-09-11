@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -82,6 +83,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // UI
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,11 +92,15 @@ class _LoginPageState extends State<LoginPage> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
+
+            // Email Textfield
             TextField(
               controller: loginIdController,
               decoration: const InputDecoration(labelText: 'Email or Username'),
             ),
             const SizedBox(height: 10),
+
+            // Password Textfield
             TextField(
               controller: passwordController,
               obscureText: !showPassword,
@@ -107,10 +113,14 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
             const SizedBox(height: 20),
+
+            // Login Button
             ElevatedButton(
               onPressed: _login,
               child: const Text('Login'),
             ),
+
+            // Sign up text
             TextButton(
               onPressed: () => Navigator.push(
                 context,

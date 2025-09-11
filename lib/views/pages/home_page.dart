@@ -1,5 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:smart_horizon_home/services/weather_services.dart';
 import 'package:smart_horizon_home/ui/view_devices.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/clothe_hanger.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/parcel_inside.dart';
@@ -13,6 +15,9 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  // Access weather service class
+  final WeatherService weatherAPI = WeatherService();
+
   // Padding's variables
   final double horizontalPadding = 40.0;
   final double verticalPadding = 20.0;
@@ -31,6 +36,32 @@ class _HomePageState extends State<HomePage> {
     ClotheHanger(),
   ];
 
+  bool _isLoadingWeather = true;
+  String _cityName = "";
+  int _temp = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWeather();
+  }
+
+  Future<void> _loadWeather() async {
+    try {
+      await weatherAPI.fetchCity();
+      await weatherAPI.callApi();
+
+      setState(() {
+        _cityName = weatherAPI.cityName ?? "Unknown";
+        _temp = weatherAPI.currentTemp;
+        _isLoadingWeather = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingWeather = false);
+      debugPrint("Error loading weather: $e");
+    }
+  }
+
   // Smart Device Switch
   void powerSwitchChanged(bool value, int index) {
     setState(() {
@@ -40,6 +71,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -64,12 +97,44 @@ class _HomePageState extends State<HomePage> {
               padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
+                children: [
+                  const Text(
                     "Welcome Home",
                     style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
                   ),
-                  Text("Name", style: TextStyle(fontSize: 30)),
+
+                  if (uid != null)
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection("users")
+                          .doc(uid)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Text(
+                            "...",
+                            style: TextStyle(fontSize: 30),
+                          );
+                        }
+                        if (!snapshot.hasData || !snapshot.data!.exists) {
+                          return const Text(
+                            "No username",
+                            style: TextStyle(fontSize: 30),
+                          );
+                        }
+
+                        final data =
+                            snapshot.data!.data() as Map<String, dynamic>?;
+
+                        return Text(
+                          data?['username'] ?? "",
+                          style: const TextStyle(fontSize: 30),
+                        );
+                      },
+                    )
+                  else
+                    const Text("Not logged in", style: TextStyle(fontSize: 30)),
                 ],
               ),
             ),
@@ -80,73 +145,84 @@ class _HomePageState extends State<HomePage> {
               child: Divider(thickness: 4),
             ),
 
-            // Weather UI - Reduced vertical padding
+            // Weather UI
             Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: horizontalPadding,
-                vertical: 15, // Reduced from 15
+                vertical: 15,
               ),
               child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 15,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // Weather Icon
-                    Icon(Icons.cloud, size: 60),
+                child: _isLoadingWeather
+                    ? const Center(child: CircularProgressIndicator())
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Weather Icon (placeholder for now)
+                          Icon(Icons.cloud, size: 60),
 
-                    // Temperature
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text("Cloudy", style: TextStyle(fontSize: 20)),
-                        Text(
-                          "30C",
-                          style: TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold,
+                          // Temperature
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Weather",
+                                style: TextStyle(fontSize: 20),
+                              ),
+
+                              // Display temperature
+                              Text(
+                                "$_temp°C",
+                                style: const TextStyle(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
 
-                    // Location (constrained so it won’t overflow)
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: 120,
-                      ), // tweak width to your liking
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text("Bangi,", style: TextStyle(fontSize: 20)),
-                          Text(
-                            "Selangor",
-                            style: TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.bold,
+                          // Location
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 120),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Display City
+                                Text(
+                                  _cityName,
+                                  style: const TextStyle(fontSize: 20),
+                                ),
+                                // State | District
+                                const Text(
+                                  "State",
+                                  style: TextStyle(
+                                    fontSize: 30,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
               ),
             ),
 
-            // Smart devices grid - Reduced vertical padding
+            // Smart devices grid
             Expanded(
               child: GridView.builder(
                 physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 25,
-                ), // Reduced vertical padding
+                padding: const EdgeInsets.symmetric(horizontal: 25),
                 itemCount: smartDevices.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
@@ -155,7 +231,6 @@ class _HomePageState extends State<HomePage> {
                 itemBuilder: (context, index) {
                   return GestureDetector(
                     onTap: () {
-                      // Navigate to corresponding page using the list
                       Navigator.push(
                         context,
                         MaterialPageRoute(
