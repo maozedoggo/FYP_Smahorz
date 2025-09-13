@@ -1,19 +1,17 @@
+// Libraries
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+// Paths
 import 'package:smart_horizon_home/services/weather_services.dart';
 import 'package:smart_horizon_home/ui/view_devices.dart';
-
 import 'package:smart_horizon_home/views/pages/smart-devices/clothe_hanger.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/parcel_inside.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/parcel_outside.dart';
-
-// import 'package:smart_horizon_home/views/pages/profile/profile_page.dart';
 import 'package:smart_horizon_home/views/pages/profile-page/profile_page.dart';
-// Make sure that the file 'profile_page.dart' defines a class named 'ProfilePage'
 import 'package:smart_horizon_home/views/pages/settings-page/settings_page.dart';
 import 'package:smart_horizon_home/views/pages/login/login_page.dart';
-
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -23,7 +21,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  
   // Access weather service class
   final WeatherService weatherAPI = WeatherService();
 
@@ -33,12 +30,10 @@ class _HomePageState extends State<HomePage> {
 
   // List of Smart Devices [Name, Part, Icon, Status]
   final List<List<dynamic>> smartDevices = [
-
     ["Parcel Box", "Outside", "lib/icons/door-open.png", true],
     ["Parcel Box", "Inside", "lib/icons/door-open.png", true],
     ["Cloth Hanger", "", "lib/icons/drying-rack.png", true],
   ];
-
 
   // List of corresponding pages (same order as smartDevices)
   final List<Widget> devicePages = const [
@@ -48,8 +43,9 @@ class _HomePageState extends State<HomePage> {
   ];
 
   bool _isLoadingWeather = true;
-  String _cityName = "";
+  String _cityName = "City";
   int _temp = 0;
+  String _stateName = "State";
 
   @override
   void initState() {
@@ -60,9 +56,11 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadWeather() async {
     try {
       await weatherAPI.fetchCity();
+      await weatherAPI.fetchState();
       await weatherAPI.callApi();
 
       setState(() {
+        _stateName = weatherAPI.stateName ?? "Unknown";
         _cityName = weatherAPI.cityName ?? "Unknown";
         _temp = weatherAPI.currentTemp;
         _isLoadingWeather = false;
@@ -85,9 +83,9 @@ class _HomePageState extends State<HomePage> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
+      // Drawer
       drawer: Drawer(
         child: ListView(
-          padding: EdgeInsets.zero,
           children: [
             const DrawerHeader(
               decoration: BoxDecoration(color: Colors.blueGrey),
@@ -154,7 +152,11 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Builder(
                     builder: (context) => IconButton(
-                      icon: const Icon(Icons.menu, size: 35, color: Colors.black),
+                      icon: const Icon(
+                        Icons.menu,
+                        size: 35,
+                        color: Colors.black,
+                      ),
                       onPressed: () => Scaffold.of(context).openDrawer(),
                     ),
                   ),
@@ -163,7 +165,6 @@ class _HomePageState extends State<HomePage> {
             ),
 
             const SizedBox(height: 20),
-
 
             // Welcome bar
             Padding(
@@ -274,8 +275,8 @@ class _HomePageState extends State<HomePage> {
                                   style: const TextStyle(fontSize: 20),
                                 ),
                                 // State | District
-                                const Text(
-                                  "State",
+                                Text(
+                                  _stateName,
                                   style: TextStyle(
                                     fontSize: 30,
                                     fontWeight: FontWeight.bold,

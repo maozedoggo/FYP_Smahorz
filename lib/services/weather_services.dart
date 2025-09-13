@@ -7,14 +7,32 @@ class WeatherService {
   int currentTemp = 0;
   int statusID = 0;
   String? cityName;
+  String? stateName;
+
+  // Fetch city from Firestore
+  Future<void> fetchState() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final cityDoc = await FirebaseFirestore.instance
+        .collection("users")
+        .doc(uid)
+        .get();
+
+    if (cityDoc.exists) {
+      stateName = cityDoc.data()?['state'];
+    }
+  }
 
   // Fetch city from Firestore
   Future<void> fetchCity() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final cityDoc =
-        await FirebaseFirestore.instance.collection("users").doc(uid).get();
+    final cityDoc = await FirebaseFirestore.instance
+        .collection("users")
+        .doc(uid)
+        .get();
 
     if (cityDoc.exists) {
       cityName = cityDoc.data()?['city'];
