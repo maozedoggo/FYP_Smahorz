@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:smart_horizon_home/views/pages/login/login_page.dart';
 import 'package:smart_horizon_home/views/pages/signup/signup_page.dart';
 
-
 class CreateAccount extends StatefulWidget {
   final String name;
   final String phone;
@@ -13,6 +12,7 @@ class CreateAccount extends StatefulWidget {
   final String addressLine2;
   final String postalCode;
   final String state;
+  final String district;
   final String country;
   final DateTime dob;
 
@@ -25,6 +25,7 @@ class CreateAccount extends StatefulWidget {
     required this.addressLine2,
     required this.postalCode,
     required this.state,
+    required this.district,
     required this.country,
     required this.dob,
   });
@@ -36,7 +37,8 @@ class CreateAccount extends StatefulWidget {
 class CreateAccountState extends State<CreateAccount> {
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
 
   bool showPassword = false;
   bool showConfirm = false;
@@ -58,9 +60,15 @@ class CreateAccountState extends State<CreateAccount> {
     final hasLowercase = RegExp(r'[a-z]');
     final hasSpecial = RegExp(r'[!@#$%^&*(),.?":{}|<>]');
 
-    if (!hasUppercase.hasMatch(value)) return 'Must contain at least 1 uppercase letter';
-    if (!hasLowercase.hasMatch(value)) return 'Must contain at least 1 lowercase letter';
-    if (!hasSpecial.hasMatch(value)) return 'Must contain at least 1 special character';
+    if (!hasUppercase.hasMatch(value)) {
+      return 'Must contain at least 1 uppercase letter';
+    }
+    if (!hasLowercase.hasMatch(value)) {
+      return 'Must contain at least 1 lowercase letter';
+    }
+    if (!hasSpecial.hasMatch(value)) {
+      return 'Must contain at least 1 special character';
+    }
 
     return null;
   }
@@ -103,43 +111,60 @@ class CreateAccountState extends State<CreateAccount> {
     }
 
     try {
-      // 1. Create Firebase Authentication account
+      // === 1. Check if username already exists ===
+      final usernameRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(usernameController.text.trim());
+      final usernameSnap = await usernameRef.get();
+
+      if (usernameSnap.exists) {
+        _showPopup(
+            'Error', 'Username already taken, please choose another one.');
+        return;
+      }
+
+      // === 2. Create Firebase Authentication account ===
       UserCredential userCredential =
           await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: widget.email,
         password: passwordController.text.trim(),
       );
 
-      // 2. Save user profile in Firestore
+      // === 3. Save user profile in Firestore (use username as doc ID) ===
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(userCredential.user!.uid)
+          .doc(usernameController.text.trim())
           .set({
         'uid': userCredential.user!.uid,
+        'username': usernameController.text.trim(),
         'name': widget.name,
         'phone': widget.phone,
         'email': widget.email,
-        'username': usernameController.text.trim(),
         'addressLine1': widget.addressLine1,
         'addressLine2': widget.addressLine2,
         'postalCode': widget.postalCode,
         'state': widget.state,
+        'district': widget.district,
         'country': widget.country,
         'dob': widget.dob.toIso8601String(),
-        'createdAt': DateTime.now(),
+        'createdAt': FieldValue.serverTimestamp(), // ✅ more accurate
       });
 
-      // 3. Show success popup
+      // === 4. Show success popup ===
       await _showPopup('Success', 'Account created successfully!');
 
-      // 4. Redirect to LoginPage
+      // === 5. Redirect to LoginPage ===
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const LoginPage()),
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      _showPopup('Error', e.message ?? 'Something went wrong');
+      if (e.code == 'email-already-in-use') {
+        _showPopup('Error', 'This email is already registered.');
+      } else {
+        _showPopup('Error', e.message ?? 'Something went wrong');
+      }
     }
   }
 
@@ -152,7 +177,6 @@ class CreateAccountState extends State<CreateAccount> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () {
-            // Navigate back to SignUpPage
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (_) => const SignUpPage()),
@@ -171,7 +195,7 @@ class CreateAccountState extends State<CreateAccount> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 20), // spacing after AppBar
+              const SizedBox(height: 20),
 
               // Title
               const Text(
@@ -193,8 +217,10 @@ class CreateAccountState extends State<CreateAccount> {
                     Text("Address Line 2: ${widget.addressLine2}"),
                     Text("Postal Code: ${widget.postalCode}"),
                     Text("State: ${widget.state}"),
+                    Text("District: ${widget.district}"),
                     Text("Country: ${widget.country}"),
-                    Text("Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}"),
+                    Text(
+                        "Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}"),
                   ],
                 ),
               ),
@@ -218,8 +244,10 @@ class CreateAccountState extends State<CreateAccount> {
                   labelText: 'Password',
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    icon: Icon(showPassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => showPassword = !showPassword),
+                    icon: Icon(
+                        showPassword ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () =>
+                        setState(() => showPassword = !showPassword),
                   ),
                 ),
               ),
@@ -233,8 +261,10 @@ class CreateAccountState extends State<CreateAccount> {
                   labelText: 'Confirm Password',
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    icon: Icon(showConfirm ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => showConfirm = !showConfirm),
+                    icon: Icon(
+                        showConfirm ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () =>
+                        setState(() => showConfirm = !showConfirm),
                   ),
                 ),
               ),
@@ -254,7 +284,8 @@ class CreateAccountState extends State<CreateAccount> {
                   ),
                   child: const Text(
                     "Create Account",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
