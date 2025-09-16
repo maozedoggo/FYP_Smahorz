@@ -27,7 +27,9 @@ class _EditAddressPageState extends State<EditAddressPage> {
     _line2Controller = TextEditingController(text: widget.address["line2"]);
     _cityController = TextEditingController(text: widget.address["city"]);
     _stateController = TextEditingController(text: widget.address["state"]);
-    _postcodeController = TextEditingController(text: widget.address["postcode"]);
+    _postcodeController = TextEditingController(
+      text: widget.address["postcode"],
+    );
   }
 
   @override
@@ -61,6 +63,7 @@ class _EditAddressPageState extends State<EditAddressPage> {
           'address': newAddress,
         });
 
+        if (!mounted) return;
         // 🔹 Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Address updated successfully!")),
@@ -69,9 +72,9 @@ class _EditAddressPageState extends State<EditAddressPage> {
         // 🔹 Return updated address back to SettingsPage
         Navigator.pop(context, newAddress);
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error updating address: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error updating address: $e")));
       }
     }
   }

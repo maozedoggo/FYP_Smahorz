@@ -36,13 +36,14 @@ class _HomePageState extends State<HomePage> {
     ["Cloth Hanger", "", "lib/icons/drying-rack.png", true],
   ];
 
-  // List of corresponding pages (same order as smartDevices)
+  // List of smartdevices pages
   final List<Widget> devicePages = const [
     ParcelBack(),
     ParcelFront(),
     ClotheHanger(),
   ];
 
+  // Fetch weather data
   bool _isLoadingWeather = true;
   String _cityName = "City";
   int _temp = 0;
@@ -79,6 +80,17 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  // Sign out
+  Future<void> _signout() async {
+    await FirebaseAuth.instance.signOut();
+
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => LoginPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -105,8 +117,7 @@ class _HomePageState extends State<HomePage> {
             children: [
               Expanded(
                 child: Column(
-                  mainAxisAlignment:
-                      MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     ListTile(
                       onTap: () {
@@ -142,7 +153,9 @@ class _HomePageState extends State<HomePage> {
                       title: const Text('Settings'),
                     ),
                     ListTile(
-                      onTap: () {},
+                      onTap: () {
+                        _signout();
+                      },
                       leading: const Padding(
                         padding: EdgeInsets.only(left: 3.0),
                         child: Icon(Icons.logout_rounded),

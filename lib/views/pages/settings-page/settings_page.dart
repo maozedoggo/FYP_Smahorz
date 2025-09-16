@@ -6,10 +6,10 @@ import 'add_member_page.dart';
 import 'add_admin_page.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({Key? key}) : super(key: key);
+  const SettingsPage({super.key});
 
   @override
-  _SettingsPageState createState() => _SettingsPageState();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
@@ -22,25 +22,25 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadAddress() async {
-  String uid = FirebaseAuth.instance.currentUser!.uid;
-  DocumentSnapshot doc =
-      await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+    DocumentSnapshot doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
 
-  if (doc.exists) {
-    final data = doc.data() as Map<String, dynamic>;
-    setState(() {
-      householdAddress = {
-        "line1": data["addressLine1"] ?? "",
-        "line2": data["addressLine2"] ?? "",
-        "city": data["city"] ?? "",
-        "state": data["state"] ?? "",
-        "postcode": data["postalCode"] ?? "",
-      };
-    });
+    if (doc.exists) {
+      final data = doc.data() as Map<String, dynamic>;
+      setState(() {
+        householdAddress = {
+          "line1": data["addressLine1"] ?? "",
+          "line2": data["addressLine2"] ?? "",
+          "city": data["city"] ?? "",
+          "state": data["state"] ?? "",
+          "postcode": data["postalCode"] ?? "",
+        };
+      });
+    }
   }
-}
-
-
 
   List<String> members = ["John Doe", "Jane Doe"];
   List<String> admins = ["User Admin"];
@@ -67,76 +67,94 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, size: 30, color: Colors.grey),
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      size: 30,
+                      color: Colors.grey,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
               const SizedBox(height: 24),
 
-// Household Address
-const Text(
-  "Household Address",
-  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
-),
-const SizedBox(height: 12),
-
-householdAddress == null
-    ? const Center(child: CircularProgressIndicator())
-    : Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.blue[50],
-          border: Border.all(color: Colors.blue.shade200),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "${householdAddress!['line1']}, ${householdAddress!['line2']}",
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "${householdAddress!['city']}, ${householdAddress!['state']} ${householdAddress!['postcode']}",
-                  style: const TextStyle(color: Colors.grey, fontSize: 14),
-                ),
-              ],
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                shape: const StadiumBorder(),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              // Household Address
+              const Text(
+                "Household Address",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
               ),
-              onPressed: () async {
-                final newAddress = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => EditAddressPage(address: householdAddress!),
-                  ),
-                );
-                if (newAddress != null) {
-                  String uid = FirebaseAuth.instance.currentUser!.uid;
-                  await FirebaseFirestore.instance.collection('users').doc(uid).update({
-                    'address': newAddress,
-                  });
+              const SizedBox(height: 12),
 
-                  setState(() {
-                    householdAddress = Map<String, String>.from(newAddress);
-                  });
-                }
-              },
-              child: const Text("Edit"),
-            ),
-          ],
-        ),
-      ),
+              householdAddress == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        border: Border.all(color: Colors.blue.shade200),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "${householdAddress!['line1']}, ${householdAddress!['line2']}",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                "${householdAddress!['city']}, ${householdAddress!['state']} ${householdAddress!['postcode']}",
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              shape: const StadiumBorder(),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                            ),
+                            onPressed: () async {
+                              final newAddress = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => EditAddressPage(
+                                    address: householdAddress!,
+                                  ),
+                                ),
+                              );
+                              if (newAddress != null) {
+                                String uid =
+                                    FirebaseAuth.instance.currentUser!.uid;
+                                await FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(uid)
+                                    .update({'address': newAddress});
 
+                                setState(() {
+                                  householdAddress = Map<String, String>.from(
+                                    newAddress,
+                                  );
+                                });
+                              }
+                            },
+                            child: const Text("Edit"),
+                          ),
+                        ],
+                      ),
+                    ),
 
               // Household Members
               Row(
@@ -154,7 +172,9 @@ householdAddress == null
                     onPressed: () async {
                       final newMember = await Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const AddMemberPage()),
+                        MaterialPageRoute(
+                          builder: (_) => const AddMemberPage(),
+                        ),
                       );
                       if (newMember != null && newMember.isNotEmpty) {
                         setState(() {
@@ -173,7 +193,13 @@ householdAddress == null
                 runSpacing: 16,
                 children: [
                   for (var i = 0; i < members.length; i++)
-                    _buildMemberCard(members[i], "Member", Colors.blue[100]!, "U${i + 1}", i),
+                    _buildMemberCard(
+                      members[i],
+                      "Member",
+                      Colors.blue[100]!,
+                      "U${i + 1}",
+                      i,
+                    ),
                 ],
               ),
 
@@ -216,7 +242,13 @@ householdAddress == null
                 runSpacing: 16,
                 children: [
                   for (var i = 0; i < admins.length; i++)
-                    _buildAdminCard(admins[i], "Admin", Colors.green[100]!, "A${i + 1}", i),
+                    _buildAdminCard(
+                      admins[i],
+                      "Admin",
+                      Colors.green[100]!,
+                      "A${i + 1}",
+                      i,
+                    ),
                 ],
               ),
             ],
@@ -227,7 +259,13 @@ householdAddress == null
   }
 
   // 🔹 Household Member Card
-  Widget _buildMemberCard(String name, String role, Color bgColor, String initials, int index) {
+  Widget _buildMemberCard(
+    String name,
+    String role,
+    Color bgColor,
+    String initials,
+    int index,
+  ) {
     return Container(
       width: 350,
       padding: const EdgeInsets.all(16),
@@ -243,13 +281,22 @@ householdAddress == null
             children: [
               CircleAvatar(
                 backgroundColor: bgColor,
-                child: Text(initials, style: const TextStyle(color: Colors.white)),
+                child: Text(
+                  initials,
+                  style: const TextStyle(color: Colors.white),
+                ),
               ),
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
                   Text(role, style: const TextStyle(color: Colors.grey)),
                 ],
               ),
@@ -270,7 +317,13 @@ householdAddress == null
   }
 
   // 🔹 Admin Card
-  Widget _buildAdminCard(String name, String role, Color bgColor, String initials, int index) {
+  Widget _buildAdminCard(
+    String name,
+    String role,
+    Color bgColor,
+    String initials,
+    int index,
+  ) {
     return Container(
       width: 350,
       padding: const EdgeInsets.all(16),
@@ -286,13 +339,22 @@ householdAddress == null
             children: [
               CircleAvatar(
                 backgroundColor: bgColor,
-                child: Text(initials, style: const TextStyle(color: Colors.white)),
+                child: Text(
+                  initials,
+                  style: const TextStyle(color: Colors.white),
+                ),
               ),
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
                   Text(role, style: const TextStyle(color: Colors.grey)),
                 ],
               ),

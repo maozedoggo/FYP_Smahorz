@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:smart_horizon_home/views/pages/login/login_page.dart';
 import 'package:smart_horizon_home/views/pages/signup/signup_page.dart';
 
-
 class CreateAccount extends StatefulWidget {
   final String name;
   final String phone;
@@ -36,7 +35,8 @@ class CreateAccount extends StatefulWidget {
 class CreateAccountState extends State<CreateAccount> {
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
 
   bool showPassword = false;
   bool showConfirm = false;
@@ -58,9 +58,12 @@ class CreateAccountState extends State<CreateAccount> {
     final hasLowercase = RegExp(r'[a-z]');
     final hasSpecial = RegExp(r'[!@#$%^&*(),.?":{}|<>]');
 
-    if (!hasUppercase.hasMatch(value)) return 'Must contain at least 1 uppercase letter';
-    if (!hasLowercase.hasMatch(value)) return 'Must contain at least 1 lowercase letter';
-    if (!hasSpecial.hasMatch(value)) return 'Must contain at least 1 special character';
+    if (!hasUppercase.hasMatch(value))
+      return 'Must contain at least 1 uppercase letter';
+    if (!hasLowercase.hasMatch(value))
+      return 'Must contain at least 1 lowercase letter';
+    if (!hasSpecial.hasMatch(value))
+      return 'Must contain at least 1 special character';
 
     return null;
   }
@@ -104,34 +107,35 @@ class CreateAccountState extends State<CreateAccount> {
 
     try {
       // 1. Create Firebase Authentication account
-      UserCredential userCredential =
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: widget.email,
-        password: passwordController.text.trim(),
-      );
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+            email: widget.email,
+            password: passwordController.text.trim(),
+          );
 
       // 2. Save user profile in Firestore
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
           .set({
-        'uid': userCredential.user!.uid,
-        'name': widget.name,
-        'phone': widget.phone,
-        'email': widget.email,
-        'username': usernameController.text.trim(),
-        'addressLine1': widget.addressLine1,
-        'addressLine2': widget.addressLine2,
-        'postalCode': widget.postalCode,
-        'state': widget.state,
-        'country': widget.country,
-        'dob': widget.dob.toIso8601String(),
-        'createdAt': DateTime.now(),
-      });
+            'uid': userCredential.user!.uid,
+            'name': widget.name,
+            'phone': widget.phone,
+            'email': widget.email,
+            'username': usernameController.text.trim(),
+            'addressLine1': widget.addressLine1,
+            'addressLine2': widget.addressLine2,
+            'postalCode': widget.postalCode,
+            'state': widget.state,
+            'country': widget.country,
+            'dob': widget.dob.toIso8601String(),
+            'createdAt': DateTime.now(),
+          });
 
       // 3. Show success popup
       await _showPopup('Success', 'Account created successfully!');
 
+      if (!mounted) return;
       // 4. Redirect to LoginPage
       Navigator.pushAndRemoveUntil(
         context,
@@ -159,10 +163,7 @@ class CreateAccountState extends State<CreateAccount> {
             );
           },
         ),
-        title: const Text(
-          '',
-          style: TextStyle(color: Colors.black),
-        ),
+        title: const Text('', style: TextStyle(color: Colors.black)),
       ),
       body: SingleChildScrollView(
         child: Container(
@@ -172,7 +173,6 @@ class CreateAccountState extends State<CreateAccount> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const SizedBox(height: 20), // spacing after AppBar
-
               // Title
               const Text(
                 "CREATE ACCOUNT",
@@ -194,7 +194,9 @@ class CreateAccountState extends State<CreateAccount> {
                     Text("Postal Code: ${widget.postalCode}"),
                     Text("State: ${widget.state}"),
                     Text("Country: ${widget.country}"),
-                    Text("Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}"),
+                    Text(
+                      "Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}",
+                    ),
                   ],
                 ),
               ),
@@ -218,8 +220,11 @@ class CreateAccountState extends State<CreateAccount> {
                   labelText: 'Password',
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    icon: Icon(showPassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => showPassword = !showPassword),
+                    icon: Icon(
+                      showPassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () =>
+                        setState(() => showPassword = !showPassword),
                   ),
                 ),
               ),
@@ -233,7 +238,9 @@ class CreateAccountState extends State<CreateAccount> {
                   labelText: 'Confirm Password',
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    icon: Icon(showConfirm ? Icons.visibility : Icons.visibility_off),
+                    icon: Icon(
+                      showConfirm ? Icons.visibility : Icons.visibility_off,
+                    ),
                     onPressed: () => setState(() => showConfirm = !showConfirm),
                   ),
                 ),
