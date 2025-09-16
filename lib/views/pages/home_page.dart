@@ -152,17 +152,23 @@ class _HomePageState extends State<HomePage> {
                       leading: const Icon(Icons.settings),
                       title: const Text('Settings'),
                     ),
-                    ListTile(
-                      onTap: () {
-                        _signout();
-                      },
-                      leading: const Padding(
-                        padding: EdgeInsets.only(left: 3.0),
-                        child: Icon(Icons.logout_rounded),
-                      ),
-                      title: const Text('Log Out'),
-                    ),
                   ],
+                ),
+              ),
+              Center(
+                child: TextButton.icon(
+                  style: ButtonStyle(
+                    animationDuration: Duration(milliseconds: 250),
+                    enableFeedback: true,
+                  ),
+                  onPressed: () {
+                    _signout();
+                  },
+                  icon: Icon(Icons.logout_rounded, color: Colors.red[700], size: 28,),
+                  label: Text(
+                    "Logout",
+                    style: TextStyle(color: Colors.red[700], fontSize: 18),
+                  ),
                 ),
               ),
 
