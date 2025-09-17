@@ -7,6 +7,7 @@ import 'package:flutter_advanced_drawer/flutter_advanced_drawer.dart';
 // Paths
 import 'package:smart_horizon_home/services/weather_services.dart';
 import 'package:smart_horizon_home/ui/view_devices.dart';
+import 'package:smart_horizon_home/views/pages/notification-page/notification_page.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/clothe_hanger.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/parcel_inside.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/parcel_outside.dart';
@@ -213,6 +214,45 @@ class _HomePageState extends State<HomePage> {
                         ),
                         onPressed: () {
                           drawerController.toggleDrawer();
+                        },
+                      ),
+                    ),
+                    Spacer(),
+
+                    // Notification icon
+                    Builder(
+                      builder: (context) => IconButton(
+                        icon: const Icon(
+                          Icons.notifications,
+                          size: 35,
+                          color: Colors.black,
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => NotificationPage(),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+
+                    // Add device icon
+                    Builder(
+                      builder: (context) => IconButton(
+                        icon: const Icon(
+                          Icons.add_circle,
+                          size: 35,
+                          color: Colors.black,
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => NotificationPage(),
+                            ),
+                          );
                         },
                       ),
                     ),
