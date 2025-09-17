@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:smart_horizon_home/views/pages/login/login_page.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -38,6 +37,17 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     );
   }
 
+  // ===== ActionCodeSettings for reset link =====
+  ActionCodeSettings _actionCodeSettings() {
+    return ActionCodeSettings(
+      url: 'https://smahorz-fyp.web.app',
+      handleCodeInApp: true,
+      androidPackageName: 'com.example.smart_horizon_home',
+      androidInstallApp: true,
+      androidMinimumVersion: '21',
+    );
+  }
+
   // ===== Request password reset =====
   Future<void> _requestReset() async {
     String input = _userController.text.trim();
@@ -69,12 +79,16 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       }
     }
 
+    if (emailToUse == null) {
+      await _showPopup('Error', "No email found to send reset link.");
+      return;
+    }
+
     try {
-      if (emailToUse == null) {
-        await _showPopup('Error', "No email found to send reset link.");
-        return;
-      }
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: emailToUse);
+      await FirebaseAuth.instance.sendPasswordResetEmail(
+        email: emailToUse,
+        actionCodeSettings: _actionCodeSettings(),
+      );
       setState(() {
         _emailSent = true;
         _emailUsed = emailToUse;
@@ -93,7 +107,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   Future<void> _resendEmail() async {
     if (_emailUsed != null) {
       try {
-        await FirebaseAuth.instance.sendPasswordResetEmail(email: _emailUsed!);
+        await FirebaseAuth.instance.sendPasswordResetEmail(
+          email: _emailUsed!,
+          actionCodeSettings: _actionCodeSettings(),
+        );
         await _showPopup('Success', "Password reset email resent!");
       } catch (e) {
         await _showPopup('Error', "Failed to resend email: ${e.toString()}");
@@ -116,10 +133,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 child: IconButton(
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginPage()),
-                    );
+                    Navigator.pop(context);
                   },
                 ),
               ),
@@ -181,13 +195,13 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                       onPressed: _resendEmail,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.white, // White button
-                        foregroundColor: Colors.black, // Text color
-                        side: const BorderSide(color: Colors.grey), // Optional subtle border
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        side: const BorderSide(color: Colors.grey),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        elevation: 0, // Flat look
+                        elevation: 0,
                       ),
                       child: const Text(
                         "Resend Email",
