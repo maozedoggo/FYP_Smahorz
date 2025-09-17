@@ -110,15 +110,16 @@ class CreateAccountState extends State<CreateAccount> {
     }
 
     try {
+      
       // === 1. Check if username already exists ===
-      final usernameRef = FirebaseFirestore.instance
+      final usernameQuery = await FirebaseFirestore.instance
           .collection('users')
-          .doc(usernameController.text.trim());
-      final usernameSnap = await usernameRef.get();
+          .where('username', isEqualTo: usernameController.text.trim())
+          .limit(1)
+          .get();
 
-      if (usernameSnap.exists) {
-        _showPopup(
-            'Error', 'Username already taken, please choose another one.');
+      if (usernameQuery.docs.isNotEmpty) {
+        _showPopup('Error', 'Username already taken, please choose another one.');
         return;
       }
 
@@ -129,25 +130,25 @@ class CreateAccountState extends State<CreateAccount> {
         password: passwordController.text.trim(),
       );
 
-      // === 3. Save user profile in Firestore (use username as doc ID) ===
+      // === 3. Save user profile in Firestore (use email as doc ID) ===
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(usernameController.text.trim())
+          .doc(widget.email)  // ← CHANGED TO USE EMAIL AS DOCUMENT ID
           .set({
-          'uid': userCredential.user!.uid,
-          'username': usernameController.text.trim(),
-          'name': widget.name,
-          'phone': widget.phone,
-          'email': widget.email,
-          'addressLine1': widget.addressLine1,
-          'addressLine2': widget.addressLine2,
-          'postalCode': widget.postalCode,
-          'state': widget.state,
-          'district': widget.district,
-          'country': widget.country,
-          'dob': widget.dob.toIso8601String(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+            'uid': userCredential.user!.uid,
+            'username': usernameController.text.trim(),
+            'name': widget.name,
+            'email': widget.email,
+            'phone': widget.phone,
+            'addressLine1': widget.addressLine1,
+            'addressLine2': widget.addressLine2,
+            'postalCode': widget.postalCode,
+            'state': widget.state,
+            'district': widget.district,
+            'country': widget.country,
+            'dob': widget.dob.toIso8601String(),
+            'createdAt': FieldValue.serverTimestamp(),
+          });
 
       // === 4. Show success popup ===
       await _showPopup('Success', 'Account created successfully!');

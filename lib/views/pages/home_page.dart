@@ -93,7 +93,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final userEmail = FirebaseAuth.instance.currentUser?.email;
 
     // Drawer Controller Variable
     final drawerController = AdvancedDrawerController();
@@ -164,7 +164,11 @@ class _HomePageState extends State<HomePage> {
                   onPressed: () {
                     _signout();
                   },
-                  icon: Icon(Icons.logout_rounded, color: Colors.red[700], size: 28,),
+                  icon: Icon(
+                    Icons.logout_rounded,
+                    color: Colors.red[700],
+                    size: 28,
+                  ),
                   label: Text(
                     "Logout",
                     style: TextStyle(color: Colors.red[700], fontSize: 18),
@@ -232,11 +236,12 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
 
-                    if (uid != null)
+                    // Check Current User
+                    if (userEmail != null)
                       StreamBuilder<DocumentSnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection("users")
-                            .doc(uid)
+                            .doc(userEmail)
                             .snapshots(),
                         builder: (context, snapshot) {
                           if (snapshot.connectionState ==
