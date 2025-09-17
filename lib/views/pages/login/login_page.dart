@@ -26,11 +26,25 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  Future<void> _showPopup(String title, String message) {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text("OK"),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _login() async {
     if (loginIdController.text.isEmpty || passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter email/username & password')),
-      );
+      _showPopup("Error", "Please enter email/username & password");
       return;
     }
 
@@ -47,9 +61,7 @@ class _LoginPageState extends State<LoginPage> {
             .get();
 
         if (querySnapshot.docs.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No user found with this username')),
-          );
+          _showPopup("Error", "No user found with this username");
           return;
         }
 
@@ -61,22 +73,20 @@ class _LoginPageState extends State<LoginPage> {
         password: password,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login successful!')),
-      );
+      _showPopup("Success", "Login successful!");
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const HomePage()),
       );
     } on FirebaseAuthException catch (e) {
-      String message = 'Login failed';
+      String message = "Login failed";
       if (e.code == 'user-not-found') {
-        message = 'No user found with this email';
+        message = "No user found with this email";
       } else if (e.code == 'wrong-password') {
-        message = 'Wrong password';
+        message = "Wrong password";
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      _showPopup("Error", message);
     }
   }
 
@@ -171,7 +181,7 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: _login,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.redAccent, 
+                    backgroundColor: Colors.redAccent,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -185,7 +195,7 @@ class _LoginPageState extends State<LoginPage> {
 
               const SizedBox(height: 30),
 
-              // Sign Up prompt 
+              // Sign Up prompt
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
