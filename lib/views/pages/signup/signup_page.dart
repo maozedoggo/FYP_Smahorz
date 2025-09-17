@@ -1,7 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; // For Date
 import 'package:smart_horizon_home/views/pages/create_account_page/create_account.dart';
-import 'package:smart_horizon_home/views/pages/login/login_page.dart'; 
+import 'package:smart_horizon_home/views/pages/login/login_page.dart';
+
+// ===== Districts for each state =====
+final Map<String, List<String>> districtsByState = {
+  "Johor": ["Batu Pahat", "Johor Bahru", "Kluang", "Kota Tinggi", "Mersing", "Muar", "Pontian", "Segamat", "Tangkak", "Kulai"],
+  "Kedah": ["Baling", "Bandar Baharu", "Kota Setar", "Kuala Muda", "Kubang Pasu", "Kulim", "Langkawi", "Padang Terap", "Pendang", "Pokok Sena", "Sik", "Yan"],
+  "Kelantan": ["Bachok", "Gua Musang", "Jeli", "Kota Bharu", "Kuala Krai", "Machang", "Pasir Mas", "Pasir Puteh", "Tanah Merah", "Tumpat"],
+  "Melaka": ["Alor Gajah", "Jasin", "Melaka Tengah"],
+  "Negeri Sembilan": ["Jelebu", "Jempol", "Kuala Pilah", "Port Dickson", "Rembau", "Seremban", "Tampin"],
+  "Pahang": ["Bentong", "Bera", "Cameron Highlands", "Jerantut", "Kuantan", "Lipis", "Maran", "Pekan", "Raub", "Rompin", "Temerloh"],
+  "Pulau Pinang": ["Barat Daya", "Seberang Perai Selatan", "Seberang Perai Tengah", "Seberang Perai Utara", "Timur Laut"],
+  "Perak": ["Bagan Datuk", "Batang Padang", "Hilir Perak", "Hulu Perak", "Kampar", "Kerian", "Kinta", "Kuala Kangsar", "Larut Matang",  "Selama", "Manjung", "Muallim", "Perak Tengah"],
+  "Perlis": ["Kangar", "Padang Besar", "Arau"],
+  "Sabah": ["Beaufort", "Beluran", "Keningau", "Kota Belud", "Kota Kinabalu", "Kota Marudu", "Kuala Penyu", "Kudat", "Kunak", "Lahad Datu", "Nabawan", "Papar", "Penampang", "Pitas", "Ranau", "Sandakan", "Semporna", "Sipitang", "Tambunan", "Tawau", "Tenom", "Tongod", "Tuaran"],
+  "Sarawak": ["Betong", "Bintulu", "Kapit", "Kuching", "Limbang", "Miri", "Mukah", "Samarahan", "Sarikei", "Serian", "Sibu", "Sri Aman"],
+  "Selangor": ["Gombak", "Hulu Langat", "Hulu Selangor", "Klang", "Kuala Langat", "Kuala Selangor", "Petaling", "Sabak Bernam", "Sepang", "Kajang", "Bangi"],
+  "Terengganu": ["Besut", "Dungun", "Hulu Terengganu", "Kemaman", "Kuala Terengganu", "Marang", "Setiu"],
+  "Kuala Lumpur": ["Bukit Bintang", "Titiwangsa", "Setiawangsa", "Kepong", "Seputeh", "Cheras", "Bandar Tun Razak", "Wangsa Maju", "Lembah Pantai"],
+  "Labuan": ["Labuan"],
+  "Putrajaya": ["Presint 1","Presint 2", "Presint 1", "Presint 3", "Presint 4", "Presint 5", "Presint 6", "Presint 7", "Presint 8", "Presint 9", "Presint 10", "Presint 11", "Presint 12", "Presint 13", "Presint 14", "Presint 15", "Presint 16", "Presint 17", "Presint 18", "Presint 19", "Presint 20"],
+};
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -24,6 +44,7 @@ class _SignUpPageState extends State<SignUpPage> {
   String selectedCountryCode = '+60';
   String? selectedCountry;
   String? selectedState;
+  String? selectedDistrict;
   DateTime? selectedDOB;
 
   // Lists
@@ -105,6 +126,11 @@ class _SignUpPageState extends State<SignUpPage> {
     return null;
   }
 
+  String? _validateDistrict(String? value) {
+    if (value == null || value.isEmpty) return 'Please select your district';
+    return null;
+  }
+
   String? _validateDOB(DateTime? value) {
     if (value == null) return 'Please select your date of birth';
     if (value.isAfter(DateTime.now())) return 'Date of birth cannot be in the future';
@@ -132,6 +158,7 @@ class _SignUpPageState extends State<SignUpPage> {
     final postalError = _validatePostalCode(postalCodeController.text);
     final countryError = _validateCountry(countryController.text);
     final stateError = _validateState(selectedState);
+    final districtError = _validateDistrict(selectedDistrict);
     final dobError = _validateDOB(selectedDOB);
 
     if (nameError != null ||
@@ -141,6 +168,7 @@ class _SignUpPageState extends State<SignUpPage> {
         postalError != null ||
         countryError != null ||
         stateError != null ||
+        districtError != null ||
         dobError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -152,6 +180,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 postalError ??
                 countryError ??
                 stateError ??
+                districtError ??
                 dobError!,
           ),
         ),
@@ -172,6 +201,7 @@ class _SignUpPageState extends State<SignUpPage> {
           addressLine2: addressLine2Controller.text,
           postalCode: postalCodeController.text,
           state: selectedState!,
+          district: selectedDistrict!, // ✅ FIXED: force non-null
           country: selectedCountry!,
           dob: selectedDOB!,
         ),
@@ -192,7 +222,6 @@ class _SignUpPageState extends State<SignUpPage> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () {
-            // Explicitly navigate to LoginPage
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (_) => const LoginPage()),
@@ -208,8 +237,6 @@ class _SignUpPageState extends State<SignUpPage> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const SizedBox(height: 20),
-
-              // SIGN UP title
               const Text(
                 "SIGN UP",
                 style: TextStyle(
@@ -217,7 +244,6 @@ class _SignUpPageState extends State<SignUpPage> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-
               const SizedBox(height: 40),
 
               // Name
@@ -247,7 +273,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   DropdownButton<String>(
                     value: selectedCountryCode,
                     items: countryCodes
-                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .map((c) => DropdownMenuItem<String>(value: c, child: Text(c)))
                         .toList(),
                     onChanged: (v) => setState(() => selectedCountryCode = v ?? '+60'),
                   ),
@@ -325,9 +351,45 @@ class _SignUpPageState extends State<SignUpPage> {
                 ),
                 initialValue: selectedState,
                 items: malaysianStates
-                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .map<DropdownMenuItem<String>>(
+                      (s) => DropdownMenuItem<String>(
+                        value: s,
+                        child: Text(s),
+                      ),
+                    )
                     .toList(),
-                onChanged: (v) => setState(() => selectedState = v),
+                onChanged: (v) {
+                  setState(() {
+                    selectedState = v;
+                    selectedDistrict = null; // reset district
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // District
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text("DISTRICT", style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: "Select District",
+                ),
+                value: selectedDistrict,
+                items: (selectedState == null
+                        ? <String>[]
+                        : districtsByState[selectedState] ?? <String>[])
+                    .map<DropdownMenuItem<String>>(
+                      (d) => DropdownMenuItem<String>(
+                        value: d,
+                        child: Text(d),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => selectedDistrict = v),
               ),
               const SizedBox(height: 16),
 

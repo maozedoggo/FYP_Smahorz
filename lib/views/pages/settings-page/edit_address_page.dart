@@ -14,31 +14,32 @@ class EditAddressPage extends StatefulWidget {
 class _EditAddressPageState extends State<EditAddressPage> {
   final _formKey = GlobalKey<FormState>();
 
-  late TextEditingController _line1Controller;
-  late TextEditingController _line2Controller;
+  late TextEditingController _addressLine1Controller;
+  late TextEditingController _addressLine2Controller;
   late TextEditingController _cityController;
   late TextEditingController _stateController;
-  late TextEditingController _postcodeController;
+  late TextEditingController _postalCodeController;
 
   @override
   void initState() {
     super.initState();
-    _line1Controller = TextEditingController(text: widget.address["line1"]);
-    _line2Controller = TextEditingController(text: widget.address["line2"]);
+    _addressLine1Controller =
+        TextEditingController(text: widget.address["addressLine1"]);
+    _addressLine2Controller =
+        TextEditingController(text: widget.address["addressLine2"]);
     _cityController = TextEditingController(text: widget.address["city"]);
     _stateController = TextEditingController(text: widget.address["state"]);
-    _postcodeController = TextEditingController(
-      text: widget.address["postcode"],
-    );
+    _postalCodeController =
+        TextEditingController(text: widget.address["postalCode"]);
   }
 
   @override
   void dispose() {
-    _line1Controller.dispose();
-    _line2Controller.dispose();
+    _addressLine1Controller.dispose();
+    _addressLine2Controller.dispose();
     _cityController.dispose();
     _stateController.dispose();
-    _postcodeController.dispose();
+    _postalCodeController.dispose();
     super.dispose();
   }
 
@@ -50,26 +51,23 @@ class _EditAddressPageState extends State<EditAddressPage> {
       String uid = FirebaseAuth.instance.currentUser!.uid;
 
       final newAddress = {
-        "line1": _line1Controller.text.trim(),
-        "line2": _line2Controller.text.trim(),
+        "addressLine1": _addressLine1Controller.text.trim(),
+        "addressLine2": _addressLine2Controller.text.trim(),
         "city": _cityController.text.trim(),
         "state": _stateController.text.trim(),
-        "postcode": _postcodeController.text.trim(),
+        "postalCode": _postalCodeController.text.trim(),
       };
 
       try {
-        // 🔹 Save address into Firestore nested "address" map
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
-          'address': newAddress,
-        });
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .update(newAddress);
 
-        if (!mounted) return;
-        // 🔹 Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Address updated successfully!")),
         );
 
-        // 🔹 Return updated address back to SettingsPage
         Navigator.pop(context, newAddress);
       } catch (e) {
         ScaffoldMessenger.of(
@@ -90,7 +88,7 @@ class _EditAddressPageState extends State<EditAddressPage> {
           child: ListView(
             children: [
               TextFormField(
-                controller: _line1Controller,
+                controller: _addressLine1Controller,
                 validator: _required,
                 decoration: const InputDecoration(
                   labelText: "Address Line 1",
@@ -99,7 +97,7 @@ class _EditAddressPageState extends State<EditAddressPage> {
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _line2Controller,
+                controller: _addressLine2Controller,
                 decoration: const InputDecoration(
                   labelText: "Address Line 2",
                   border: OutlineInputBorder(),
@@ -125,12 +123,12 @@ class _EditAddressPageState extends State<EditAddressPage> {
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _postcodeController,
+                controller: _postalCodeController,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 validator: _required,
                 decoration: const InputDecoration(
-                  labelText: "Postcode",
+                  labelText: "Postal Code",
                   border: OutlineInputBorder(),
                 ),
               ),

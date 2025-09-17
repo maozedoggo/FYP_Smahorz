@@ -12,6 +12,7 @@ class CreateAccount extends StatefulWidget {
   final String addressLine2;
   final String postalCode;
   final String state;
+  final String district;
   final String country;
   final DateTime dob;
 
@@ -24,6 +25,7 @@ class CreateAccount extends StatefulWidget {
     required this.addressLine2,
     required this.postalCode,
     required this.state,
+    required this.district,
     required this.country,
     required this.dob,
   });
@@ -58,13 +60,15 @@ class CreateAccountState extends State<CreateAccount> {
     final hasLowercase = RegExp(r'[a-z]');
     final hasSpecial = RegExp(r'[!@#$%^&*(),.?":{}|<>]');
 
-    if (!hasUppercase.hasMatch(value))
+    if (!hasUppercase.hasMatch(value)) {
       return 'Must contain at least 1 uppercase letter';
-    if (!hasLowercase.hasMatch(value))
+    }
+    if (!hasLowercase.hasMatch(value)) {
       return 'Must contain at least 1 lowercase letter';
-    if (!hasSpecial.hasMatch(value))
+    }
+    if (!hasSpecial.hasMatch(value)) {
       return 'Must contain at least 1 special character';
-
+    }
     return null;
   }
 
@@ -106,44 +110,60 @@ class CreateAccountState extends State<CreateAccount> {
     }
 
     try {
-      // 1. Create Firebase Authentication account
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-            email: widget.email,
-            password: passwordController.text.trim(),
-          );
+      // === 1. Check if username already exists ===
+      final usernameRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(usernameController.text.trim());
+      final usernameSnap = await usernameRef.get();
 
-      // 2. Save user profile in Firestore
+      if (usernameSnap.exists) {
+        _showPopup(
+            'Error', 'Username already taken, please choose another one.');
+        return;
+      }
+
+      // === 2. Create Firebase Authentication account ===
+      UserCredential userCredential =
+          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: widget.email,
+        password: passwordController.text.trim(),
+      );
+
+      // === 3. Save user profile in Firestore (use username as doc ID) ===
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(userCredential.user!.uid)
+          .doc(usernameController.text.trim())
           .set({
-            'uid': userCredential.user!.uid,
-            'name': widget.name,
-            'phone': widget.phone,
-            'email': widget.email,
-            'username': usernameController.text.trim(),
-            'addressLine1': widget.addressLine1,
-            'addressLine2': widget.addressLine2,
-            'postalCode': widget.postalCode,
-            'state': widget.state,
-            'country': widget.country,
-            'dob': widget.dob.toIso8601String(),
-            'createdAt': DateTime.now(),
-          });
+          'uid': userCredential.user!.uid,
+          'username': usernameController.text.trim(),
+          'name': widget.name,
+          'phone': widget.phone,
+          'email': widget.email,
+          'addressLine1': widget.addressLine1,
+          'addressLine2': widget.addressLine2,
+          'postalCode': widget.postalCode,
+          'state': widget.state,
+          'district': widget.district,
+          'country': widget.country,
+          'dob': widget.dob.toIso8601String(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
 
-      // 3. Show success popup
+      // === 4. Show success popup ===
       await _showPopup('Success', 'Account created successfully!');
 
-      if (!mounted) return;
-      // 4. Redirect to LoginPage
+      // === 5. Redirect to LoginPage ===
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const LoginPage()),
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      _showPopup('Error', e.message ?? 'Something went wrong');
+      if (e.code == 'email-already-in-use') {
+        _showPopup('Error', 'This email is already registered.');
+      } else {
+        _showPopup('Error', e.message ?? 'Something went wrong');
+      }
     }
   }
 
@@ -156,7 +176,6 @@ class CreateAccountState extends State<CreateAccount> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () {
-            // Navigate back to SignUpPage
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (_) => const SignUpPage()),
@@ -172,7 +191,8 @@ class CreateAccountState extends State<CreateAccount> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 20), // spacing after AppBar
+              const SizedBox(height: 20),
+
               // Title
               const Text(
                 "CREATE ACCOUNT",
@@ -193,10 +213,10 @@ class CreateAccountState extends State<CreateAccount> {
                     Text("Address Line 2: ${widget.addressLine2}"),
                     Text("Postal Code: ${widget.postalCode}"),
                     Text("State: ${widget.state}"),
+                    Text("District: ${widget.district}"),
                     Text("Country: ${widget.country}"),
-                    Text(
-                      "Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}",
-                    ),
+                    Text("Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}"),
+
                   ],
                 ),
               ),
@@ -221,8 +241,7 @@ class CreateAccountState extends State<CreateAccount> {
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      showPassword ? Icons.visibility : Icons.visibility_off,
-                    ),
+                        showPassword ? Icons.visibility : Icons.visibility_off),
                     onPressed: () =>
                         setState(() => showPassword = !showPassword),
                   ),
@@ -239,9 +258,9 @@ class CreateAccountState extends State<CreateAccount> {
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      showConfirm ? Icons.visibility : Icons.visibility_off,
-                    ),
-                    onPressed: () => setState(() => showConfirm = !showConfirm),
+                        showConfirm ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () =>
+                        setState(() => showConfirm = !showConfirm),
                   ),
                 ),
               ),
@@ -261,7 +280,8 @@ class CreateAccountState extends State<CreateAccount> {
                   ),
                   child: const Text(
                     "Create Account",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),

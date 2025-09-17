@@ -1,74 +1,69 @@
-
-import 'dart:io';
-import 'edit_profile_page.dart';
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart';
 
-class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+class MemberProfilePage extends StatefulWidget {
+  final String memberId; // Firestore UID of the member
+
+  const MemberProfilePage({Key? key, required this.memberId}) : super(key: key);
 
   @override
-  State<ProfilePage> createState() => _ProfilePageState();
+  State<MemberProfilePage> createState() => _MemberProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
+class _MemberProfilePageState extends State<MemberProfilePage> {
   String? _photoUrl;
   String? _name;
+  String? _email;
+  String? _role;
   bool _loading = true;
+  List<Map<String, dynamic>> _activities = [];
 
   @override
   void initState() {
     super.initState();
-    _loadUserProfile();
+    _loadMemberProfile();
   }
 
-  Future<void> _loadUserProfile() async {
-    String uid = FirebaseAuth.instance.currentUser!.uid;
-    DocumentSnapshot doc =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
-
-    if (doc.exists) {
-      final data = doc.data() as Map<String, dynamic>;
-      setState(() {
-        _photoUrl = data['photoUrl'];
-        _name = data['name'] ?? "No Name";
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _pickAndUploadImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-    if (pickedFile == null) return;
-
-    File file = File(pickedFile.path);
-    String uid = FirebaseAuth.instance.currentUser!.uid;
-
+  Future<void> _loadMemberProfile() async {
     try {
-      // Upload to Firebase Storage
-      final ref =
-          FirebaseStorage.instance.ref().child('profilePictures/$uid.jpg');
-      await ref.putFile(file);
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.memberId)
+          .get();
 
-      // Get download URL
-      String downloadUrl = await ref.getDownloadURL();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _photoUrl = data['photoUrl'];
+          _name = data['name'] ?? "No Name";
+          _email = data['email'] ?? "No Email";
+          _role = data['role'] ?? "Member";
+        });
 
-      // Save to Firestore
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'photoUrl': downloadUrl,
-      });
+        // Load recent activities if stored in a subcollection
+        final activitySnap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.memberId)
+            .collection('activities')
+            .orderBy('time', descending: true)
+            .limit(10)
+            .get();
 
-      setState(() {
-        _photoUrl = downloadUrl;
-      });
+        setState(() {
+          _activities = activitySnap.docs.map((d) {
+            final adata = d.data();
+            return {
+              "time": adata['time'] ?? "",
+              "action": adata['action'] ?? "",
+            };
+          }).toList();
+          _loading = false;
+        });
+      }
     } catch (e) {
-      debugPrint("Error uploading image: $e");
+      debugPrint("Error loading member profile: $e");
+      setState(() => _loading = false);
     }
   }
 
@@ -82,6 +77,10 @@ class _ProfilePageState extends State<ProfilePage> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black87, size: 28),
           onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          "Member Profile",
+          style: TextStyle(color: Colors.black87),
         ),
       ),
       body: _loading
@@ -108,24 +107,18 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       child: Row(
                         children: [
-                          // Profile picture
-                          GestureDetector(
-                            onTap: _pickAndUploadImage,
-                            child: CircleAvatar(
-                              radius: 48,
-                              backgroundImage: _photoUrl != null
-                                  ? NetworkImage(_photoUrl!)
-                                  : null,
-                              backgroundColor: Colors.grey[300],
-                              child: _photoUrl == null
-                                  ? const Icon(Icons.person,
-                                      size: 40, color: Colors.white)
-                                  : null,
-                            ),
+                          CircleAvatar(
+                            radius: 48,
+                            backgroundImage: _photoUrl != null
+                                ? NetworkImage(_photoUrl!)
+                                : null,
+                            backgroundColor: Colors.grey[300],
+                            child: _photoUrl == null
+                                ? const Icon(Icons.person,
+                                    size: 40, color: Colors.white)
+                                : null,
                           ),
                           const SizedBox(width: 16),
-
-                          // Name + Edit Button
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -139,31 +132,21 @@ class _ProfilePageState extends State<ProfilePage> {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                ElevatedButton(
-  onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const EditProfilePage()),
-    );
-  },
-  style: ElevatedButton.styleFrom(
-    backgroundColor: Colors.blue[500],
-    foregroundColor: Colors.white,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(10),
-    ),
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-    elevation: 3,
-  ),
-  child: const Text(
-    "EDIT",
-    style: TextStyle(
-      fontSize: 14,
-      fontWeight: FontWeight.w500,
-    ),
-  ),
-)
-
+                                Text(
+                                  _email ?? "No Email",
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _role ?? "Member",
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.black54,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -202,17 +185,16 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ],
                       ),
-                      child: Column(
-                        children: const [
-                          ActivityItem(
-                              time: "7:45pm", action: "Turn on room lights"),
-                          ActivityItem(time: "8:30pm", action: "Open parcel box"),
-                          ActivityItem(
-                              time: "8:45pm", action: "Retract clothe hanger"),
-                          ActivityItem(
-                              time: "9:00pm", action: "Turn off room lights"),
-                        ],
-                      ),
+                      child: _activities.isEmpty
+                          ? const Text("No recent activity",
+                              style: TextStyle(color: Colors.grey))
+                          : Column(
+                              children: _activities
+                                  .map((a) => ActivityItem(
+                                      time: a["time"] ?? "",
+                                      action: a["action"] ?? ""))
+                                  .toList(),
+                            ),
                     ),
                   ],
                 ),
