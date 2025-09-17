@@ -7,10 +7,10 @@ import 'add_member_page.dart';
 import 'member_profile_page.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({Key? key}) : super(key: key);
+  const SettingsPage({super.key});
 
   @override
-  _SettingsPageState createState() => _SettingsPageState();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
@@ -287,7 +287,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     return const Text("No pending invites",
                         style: TextStyle(color: Colors.grey));
                   }
-
+                  
                   return Column(
                     children: snapshot.data!.docs.map((doc) {
                       final householdId = doc.reference.parent.parent!.id;

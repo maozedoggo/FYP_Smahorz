@@ -1,4 +1,3 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -60,6 +59,8 @@ class _LoginPageState extends State<LoginPage> {
             .where('username', isEqualTo: loginInput)
             .get();
 
+        if (!mounted) return;
+
         if (querySnapshot.docs.isEmpty) {
           _showPopup("Error", "No user found with this username");
           return;
@@ -72,6 +73,7 @@ class _LoginPageState extends State<LoginPage> {
         email: emailToUse,
         password: password,
       );
+
 
       _showPopup("Success", "Login successful!");
 
@@ -105,10 +107,7 @@ class _LoginPageState extends State<LoginPage> {
               // LOGIN title
               const Text(
                 "LOGIN",
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
 
               const SizedBox(height: 50),
@@ -152,8 +151,11 @@ class _LoginPageState extends State<LoginPage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   suffixIcon: IconButton(
-                    icon: Icon(showPassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => showPassword = !showPassword),
+                    icon: Icon(
+                      showPassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () =>
+                        setState(() => showPassword = !showPassword),
                   ),
                 ),
               ),
@@ -165,7 +167,9 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const ForgotPasswordPage()),
+                      MaterialPageRoute(
+                        builder: (_) => const ForgotPasswordPage(),
+                      ),
                     );
                   },
                   child: const Text('Forgot Password?'),

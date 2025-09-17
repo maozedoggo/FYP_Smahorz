@@ -349,7 +349,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   border: OutlineInputBorder(),
                   hintText: "Select State",
                 ),
-                value: selectedState,
+                initialValue: selectedState,
                 items: malaysianStates
                     .map<DropdownMenuItem<String>>(
                       (s) => DropdownMenuItem<String>(

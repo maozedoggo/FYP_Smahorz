@@ -69,7 +69,6 @@ class CreateAccountState extends State<CreateAccount> {
     if (!hasSpecial.hasMatch(value)) {
       return 'Must contain at least 1 special character';
     }
-
     return null;
   }
 
@@ -135,20 +134,20 @@ class CreateAccountState extends State<CreateAccount> {
           .collection('users')
           .doc(usernameController.text.trim())
           .set({
-        'uid': userCredential.user!.uid,
-        'username': usernameController.text.trim(),
-        'name': widget.name,
-        'phone': widget.phone,
-        'email': widget.email,
-        'addressLine1': widget.addressLine1,
-        'addressLine2': widget.addressLine2,
-        'postalCode': widget.postalCode,
-        'state': widget.state,
-        'district': widget.district,
-        'country': widget.country,
-        'dob': widget.dob.toIso8601String(),
-        'createdAt': FieldValue.serverTimestamp(), // ✅ more accurate
-      });
+          'uid': userCredential.user!.uid,
+          'username': usernameController.text.trim(),
+          'name': widget.name,
+          'phone': widget.phone,
+          'email': widget.email,
+          'addressLine1': widget.addressLine1,
+          'addressLine2': widget.addressLine2,
+          'postalCode': widget.postalCode,
+          'state': widget.state,
+          'district': widget.district,
+          'country': widget.country,
+          'dob': widget.dob.toIso8601String(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
 
       // === 4. Show success popup ===
       await _showPopup('Success', 'Account created successfully!');
@@ -183,10 +182,7 @@ class CreateAccountState extends State<CreateAccount> {
             );
           },
         ),
-        title: const Text(
-          '',
-          style: TextStyle(color: Colors.black),
-        ),
+        title: const Text('', style: TextStyle(color: Colors.black)),
       ),
       body: SingleChildScrollView(
         child: Container(
@@ -219,8 +215,8 @@ class CreateAccountState extends State<CreateAccount> {
                     Text("State: ${widget.state}"),
                     Text("District: ${widget.district}"),
                     Text("Country: ${widget.country}"),
-                    Text(
-                        "Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}"),
+                    Text("Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}"),
+
                   ],
                 ),
               ),

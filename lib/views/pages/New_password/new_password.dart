@@ -34,9 +34,12 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
     final hasLowercase = RegExp(r'[a-z]');
     final hasSpecial = RegExp(r'[!@#$%^&*(),.?":{}|<>]');
 
-    if (!hasUppercase.hasMatch(value)) return 'Must contain at least 1 uppercase letter';
-    if (!hasLowercase.hasMatch(value)) return 'Must contain at least 1 lowercase letter';
-    if (!hasSpecial.hasMatch(value)) return 'Must contain at least 1 special character';
+    if (!hasUppercase.hasMatch(value))
+      return 'Must contain at least 1 uppercase letter';
+    if (!hasLowercase.hasMatch(value))
+      return 'Must contain at least 1 lowercase letter';
+    if (!hasSpecial.hasMatch(value))
+      return 'Must contain at least 1 special character';
 
     return null;
   }
@@ -87,7 +90,8 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
 
       setState(() => isLoading = false);
       await _showPopup('Success', 'Password has been reset successfully!');
-      
+
+      if (!mounted) return;
       // Redirect to Login Page
       Navigator.pushAndRemoveUntil(
         context,
@@ -127,10 +131,7 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
               // Title
               const Text(
                 "RESET PASSWORD",
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 30),
 
@@ -149,8 +150,11 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
                   labelText: "New Password",
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    icon: Icon(showPassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => showPassword = !showPassword),
+                    icon: Icon(
+                      showPassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () =>
+                        setState(() => showPassword = !showPassword),
                   ),
                 ),
               ),
@@ -164,7 +168,9 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
                   labelText: "Confirm Password",
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    icon: Icon(showConfirm ? Icons.visibility : Icons.visibility_off),
+                    icon: Icon(
+                      showConfirm ? Icons.visibility : Icons.visibility_off,
+                    ),
                     onPressed: () => setState(() => showConfirm = !showConfirm),
                   ),
                 ),
@@ -187,7 +193,10 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
                       ? const CircularProgressIndicator(color: Colors.white)
                       : const Text(
                           "Reset Password",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                 ),
               ),

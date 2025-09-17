@@ -70,9 +70,9 @@ class _EditAddressPageState extends State<EditAddressPage> {
 
         Navigator.pop(context, newAddress);
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error updating address: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error updating address: $e")));
       }
     }
   }
