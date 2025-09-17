@@ -2,6 +2,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:smart_horizon_home/ui/view_devices.dart';
+
 
 // Paths
 import 'package:smart_horizon_home/services/weather_services.dart';
@@ -9,9 +11,12 @@ import 'package:smart_horizon_home/ui/view_devices.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/clothe_hanger.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/parcel_inside.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/parcel_outside.dart';
+
 import 'package:smart_horizon_home/views/pages/profile-page/profile_page.dart';
 import 'package:smart_horizon_home/views/pages/settings-page/settings_page.dart';
 import 'package:smart_horizon_home/views/pages/login/login_page.dart';
+import 'package:smart_horizon_home/views/pages/notification-page/notification_page.dart';
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -28,12 +33,33 @@ class _HomePageState extends State<HomePage> {
   final double horizontalPadding = 40.0;
   final double verticalPadding = 20.0;
 
+ 
   // List of Smart Devices [Name, Part, Icon, Status]
   final List<List<dynamic>> smartDevices = [
     ["Parcel Box", "Outside", "lib/icons/door-open.png", true],
     ["Parcel Box", "Inside", "lib/icons/door-open.png", true],
     ["Cloth Hanger", "", "lib/icons/drying-rack.png", true],
   ];
+
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsername();
+  }
+
+  Future<void> _loadUsername() async {
+    String uid = FirebaseAuth.instance.currentUser!.uid;
+
+    DocumentSnapshot userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
+    if (userDoc.exists) {
+      setState(() {
+        username = userDoc['username'] ?? "User"; // fallback
+      });
+    }
+  }
 
   // List of corresponding pages (same order as smartDevices)
   final List<Widget> devicePages = const [
@@ -148,7 +174,7 @@ class _HomePageState extends State<HomePage> {
                 vertical: verticalPadding,
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Builder(
                     builder: (context) => IconButton(
@@ -159,6 +185,48 @@ class _HomePageState extends State<HomePage> {
                       ),
                       onPressed: () => Scaffold.of(context).openDrawer(),
                     ),
+                  ),
+
+                  // 🔔 Notification Bell with Red Dot
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('notifications')
+                        .where('toUid', isEqualTo: FirebaseAuth.instance.currentUser!.uid)
+                        .where('status', isEqualTo: 'pending')
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      int unreadCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
+
+                      return Stack(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.notifications, size: 30, color: Colors.black),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const NotificationPage()),
+                              );
+                            },
+                          ),
+                          if (unreadCount > 0)
+                            Positioned(
+                              right: 6,
+                              top: 6,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  unreadCount.toString(),
+                                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
