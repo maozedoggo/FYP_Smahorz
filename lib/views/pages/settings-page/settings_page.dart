@@ -18,7 +18,7 @@ class _SettingsPageState extends State<SettingsPage> {
   List<String> admins = [];
   bool isLoading = true;
 
-  DocumentReference? userDocRef; // Store user doc reference
+  DocumentReference? userDocRef;
 
   @override
   void initState() {
@@ -33,23 +33,16 @@ class _SettingsPageState extends State<SettingsPage> {
     if (email == null) return;
 
     try {
-      // Query user by email
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
+      userDocRef = FirebaseFirestore.instance.collection('users').doc(email);
+      final doc = await userDocRef!.get();
 
-      if (query.docs.isNotEmpty) {
-        final data = query.docs.first.data()!;
-        userDocRef = query.docs.first.reference;
-
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
         setState(() {
           householdAddress = {
             "line1": data["addressLine1"] ?? "",
             "line2": data["addressLine2"] ?? "",
             "district": data["district"] ?? "",
-            "city": data["city"] ?? "",
             "state": data["state"] ?? "",
             "postcode": data["postalCode"] ?? "",
             "country": data["country"] ?? "",
@@ -59,8 +52,7 @@ class _SettingsPageState extends State<SettingsPage> {
           isLoading = false;
         });
       } else {
-        // If no document, create it
-        userDocRef = await FirebaseFirestore.instance.collection('users').add({
+        await userDocRef!.set({
           "email": email,
           "addressLine1": "",
           "addressLine2": "",
@@ -71,20 +63,7 @@ class _SettingsPageState extends State<SettingsPage> {
           "members": [],
           "admins": [],
         });
-
-        setState(() {
-          householdAddress = {
-            "line1": "",
-            "line2": "",
-            "district": "",
-            "state": "",
-            "postcode": "",
-            "country": "",
-          };
-          members = [];
-          admins = [];
-          isLoading = false;
-        });
+        setState(() => isLoading = false);
       }
     } catch (e) {
       debugPrint("Error loading data: $e");
@@ -96,19 +75,20 @@ class _SettingsPageState extends State<SettingsPage> {
     if (userDocRef == null) return;
 
     try {
-      await userDocRef!.update(updatedData);
-      _loadData();
+      await userDocRef!.set(updatedData, SetOptions(merge: true));
+      await _loadData();
     } catch (e) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Error updating document: $e")));
+          .showSnackBar(SnackBar(content: Text("Error updating: $e")));
     }
   }
 
-  Widget _buildCard(
-      {required String title,
-      required List<Widget> children,
-      required List<Widget> actions,
-      IconData? icon}) {
+  Widget _buildCard({
+    required String title,
+    required List<Widget> children,
+    required List<Widget> actions,
+    IconData? icon,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 16),
@@ -117,9 +97,10 @@ class _SettingsPageState extends State<SettingsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 4))
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -130,11 +111,13 @@ class _SettingsPageState extends State<SettingsPage> {
               if (icon != null) Icon(icon, color: Colors.blue.shade600),
               if (icon != null) const SizedBox(width: 8),
               Expanded(
-                child: Text(title,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ),
-              const SizedBox(width: 8), // spacing between title and buttons
+              const SizedBox(width: 8),
               ...actions,
             ],
           ),
@@ -145,28 +128,20 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildMemberCard(String name, String role, Color bgColor, String initials, int index) {
+  Widget _buildMemberCard(String name, int index) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: const Color.fromARGB(255, 255, 255, 255),
-        border: Border.all(color: Colors.grey.shade300),
+        color: Colors.blue[50],
+        border: Border.all(color: Colors.blue.shade200),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              CircleAvatar(backgroundColor: bgColor, child: Text(initials, style: const TextStyle(color: Colors.white))),
-              const SizedBox(width: 12),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text(role, style: const TextStyle(color: Colors.grey)),
-              ]),
-            ],
-          ),
+          Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
           TextButton(
             onPressed: () async {
               members.removeAt(index);
@@ -180,10 +155,11 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildAdminCard(String name, String role, Color bgColor, String initials, int index) {
+  Widget _buildAdminCard(String name, int index) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.green[50],
         border: Border.all(color: Colors.green.shade200),
@@ -192,16 +168,7 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              CircleAvatar(backgroundColor: bgColor, child: Text(initials, style: const TextStyle(color: Colors.white))),
-              const SizedBox(width: 12),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text(role, style: const TextStyle(color: Colors.grey)),
-              ]),
-            ],
-          ),
+          Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
           TextButton(
             onPressed: () async {
               admins.removeAt(index);
@@ -235,7 +202,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // All cards in one column container
+                    // Household Address
                     _buildCard(
                       title: "Household Address",
                       icon: Icons.home,
@@ -246,18 +213,23 @@ class _SettingsPageState extends State<SettingsPage> {
                             final newAddress = await Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) => EditAddressPage(
-                                      address: householdAddress!)),
+                                builder: (_) =>
+                                    EditAddressPage(address: householdAddress!),
+                              ),
                             );
+
                             if (newAddress != null) {
-                              await _updateDocument({
-                                "addressLine1": newAddress["line1"] ?? "",
-                                "addressLine2": newAddress["line2"] ?? "",
-                                "district": newAddress["district"] ?? "",
-                                "state": newAddress["state"] ?? "",
-                                "postalCode": newAddress["postcode"] ?? "",
-                                "country": newAddress["country"] ?? "",
+                              setState(() {
+                                householdAddress = {
+                                  "line1": newAddress["addressLine1"] ?? "",
+                                  "line2": newAddress["addressLine2"] ?? "",
+                                  "district": newAddress["district"] ?? "",
+                                  "state": newAddress["state"] ?? "",
+                                  "postcode": newAddress["postalCode"] ?? "",
+                                  "country": newAddress["country"] ?? "",
+                                };
                               });
+                              await _updateDocument(newAddress);
                             }
                           },
                           child: const Text("Edit"),
@@ -265,15 +237,24 @@ class _SettingsPageState extends State<SettingsPage> {
                       ],
                       children: [
                         Text(
-                          "${householdAddress!['line1']}, ${householdAddress!['line2']}",
+                          [
+                            householdAddress!['line1'],
+                            householdAddress?['line2'],
+                          ].where((e) => e!.isNotEmpty).join(", "),
                           style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
                         Text(
-                          "${householdAddress!['district']}, ${householdAddress!['state']} ${householdAddress!['postcode']}, ${householdAddress!['country']}",
+                          [
+                            householdAddress!['district'],
+                            householdAddress!['state'],
+                            householdAddress!['postcode'],
+                            householdAddress!['country'],
+                          ].where((e) => e!.isNotEmpty).join(", "),
                           style: const TextStyle(color: Colors.grey),
                         ),
                       ],
                     ),
+
                     // Members
                     _buildCard(
                       title: "Household Members",
@@ -283,7 +264,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           onPressed: () async {
                             final newMember = await Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const AddMemberPage()),
+                              MaterialPageRoute(
+                                  builder: (_) => const AddMemberPage()),
                             );
                             if (newMember != null && newMember.isNotEmpty) {
                               members.add(newMember);
@@ -297,15 +279,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         Column(
                           children: List.generate(
                             members.length,
-                            (index) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8.0),
-                              child: _buildMemberCard(
-                                  members[index], "Member", Colors.blue, "U${index + 1}", index),
-                            ),
+                            (index) => _buildMemberCard(members[index], index),
                           ),
-                        )
+                        ),
                       ],
                     ),
+
                     // Admins
                     _buildCard(
                       title: "Household Admins",
@@ -316,7 +295,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             final newAdmin = await Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) => AddAdminPage(members: members)),
+                                builder: (_) => AddAdminPage(members: members),
+                              ),
                             );
                             if (newAdmin != null && newAdmin.isNotEmpty) {
                               admins.add(newAdmin);
@@ -330,13 +310,9 @@ class _SettingsPageState extends State<SettingsPage> {
                         Column(
                           children: List.generate(
                             admins.length,
-                            (index) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8.0),
-                              child: _buildAdminCard(
-                                  admins[index], "Admin", Colors.green, "A${index + 1}", index),
-                            ),
+                            (index) => _buildAdminCard(admins[index], index),
                           ),
-                        )
+                        ),
                       ],
                     ),
                   ],

@@ -30,20 +30,43 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Future<void> _loadUserProfile() async {
-    String uid = FirebaseAuth.instance.currentUser!.uid;
-    DocumentSnapshot doc =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    String? email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null) return;
 
-    if (doc.exists) {
-      final data = doc.data() as Map<String, dynamic>;
-      _usernameController.text = data['username'] ?? '';
-      _nameController.text = data['name'] ?? '';
-      _emailController.text =
-          FirebaseAuth.instance.currentUser?.email ?? "No email";
-      setState(() {
-        _photoUrl = data['photoUrl'];
-        _loading = false;
-      });
+    try {
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(email)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        _usernameController.text = data['username'] ?? '';
+        _nameController.text = data['name'] ?? '';
+        _emailController.text = email;
+        setState(() {
+          _photoUrl = data['photoUrl'];
+          _loading = false;
+        });
+      } else {
+        // Create empty document if it doesn't exist
+        await FirebaseFirestore.instance.collection('users').doc(email).set({
+          "email": email,
+          "username": "",
+          "name": "",
+          "photoUrl": null,
+        });
+        setState(() {
+          _usernameController.text = "";
+          _nameController.text = "";
+          _emailController.text = email;
+          _photoUrl = null;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading profile: $e");
+      setState(() => _loading = false);
     }
   }
 
@@ -60,61 +83,55 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      _saving = true;
-    });
+    setState(() => _saving = true);
 
-    String uid = FirebaseAuth.instance.currentUser!.uid;
+    String? email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null) return;
+
     String? imageUrl = _photoUrl;
 
     try {
       // Upload new profile picture if selected
       if (_newImageFile != null) {
-        final ref =
-            FirebaseStorage.instance.ref().child('profilePictures/$uid.jpg');
+        final ref = FirebaseStorage.instance.ref().child(
+          'profilePictures/$email.jpg',
+        );
         await ref.putFile(_newImageFile!);
         imageUrl = await ref.getDownloadURL();
       }
 
       // Update Firestore
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+      await FirebaseFirestore.instance.collection('users').doc(email).update({
         'username': _usernameController.text.trim(),
         'name': _nameController.text.trim(),
         'photoUrl': imageUrl,
       });
 
-      // Update email in Firebase Auth
-      if (_emailController.text.trim() !=
-          FirebaseAuth.instance.currentUser!.email) {
-        await FirebaseAuth.instance.currentUser!
-            .updateEmail(_emailController.text.trim());
+      // Update email in Firebase Auth if changed
+      if (_emailController.text.trim() != email) {
+        await FirebaseAuth.instance.currentUser!.updateEmail(
+          _emailController.text.trim(),
+        );
       }
 
-      if (mounted) {
-        Navigator.pop(context);
-      }
+      if (mounted) Navigator.pop(context);
     } catch (e) {
       debugPrint("Error saving profile: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-        });
-      }
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Edit Profile"),
-      ),
+      backgroundColor: const Color(0xFFF3F4F6),
+      appBar: AppBar(title: const Text("Edit Profile")),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
@@ -132,12 +149,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           backgroundImage: _newImageFile != null
                               ? FileImage(_newImageFile!)
                               : (_photoUrl != null
-                                  ? NetworkImage(_photoUrl!)
-                                  : null) as ImageProvider?,
+                                        ? NetworkImage(_photoUrl!)
+                                        : null)
+                                    as ImageProvider?,
                           backgroundColor: Colors.grey[300],
                           child: (_photoUrl == null && _newImageFile == null)
-                              ? const Icon(Icons.person,
-                                  size: 50, color: Colors.white)
+                              ? const Icon(
+                                  Icons.person,
+                                  size: 50,
+                                  color: Colors.white,
+                                )
                               : null,
                         ),
                       ),
@@ -176,12 +197,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         border: OutlineInputBorder(),
                       ),
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return "Required";
-                        }
-                        if (!value.contains('@')) {
-                          return "Enter valid email";
-                        }
+                        if (value == null || value.isEmpty) return "Required";
+                        if (!value.contains('@')) return "Enter valid email";
                         return null;
                       },
                     ),
@@ -191,9 +208,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     ElevatedButton(
                       onPressed: _saving ? null : _saveProfile,
                       child: _saving
-                          ? const CircularProgressIndicator(
-                              color: Colors.white,
-                            )
+                          ? const CircularProgressIndicator(color: Colors.white)
                           : const Text("Save Changes"),
                     ),
                   ],

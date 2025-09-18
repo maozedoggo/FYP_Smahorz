@@ -7,6 +7,7 @@ class AddAdminPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color.fromARGB(255, 240, 240, 241),
       appBar: AppBar(title: const Text("Vote for Admin")),
       body: ListView.builder(
         itemCount: members.length,

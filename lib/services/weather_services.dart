@@ -21,7 +21,7 @@ class WeatherService {
 
     if (document.exists) {
       stateName = document.data()?['state'];
-      cityName = document.data()?['city'];
+      cityName = document.data()?['district'];
     }
   }
 

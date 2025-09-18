@@ -4,7 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class EditAddressPage extends StatefulWidget {
-  const EditAddressPage({super.key, required Map<String, String> address});
+  final Map<String, String> address;
+
+  const EditAddressPage({super.key, required this.address});
 
   @override
   State<EditAddressPage> createState() => _EditAddressPageState();
@@ -13,11 +15,11 @@ class EditAddressPage extends StatefulWidget {
 class _EditAddressPageState extends State<EditAddressPage> {
   final _formKey = GlobalKey<FormState>();
 
-  final TextEditingController _addressLine1Controller = TextEditingController();
-  final TextEditingController _addressLine2Controller = TextEditingController();
-  final TextEditingController _districtController = TextEditingController();
-  final TextEditingController _stateController = TextEditingController();
-  final TextEditingController _postalCodeController = TextEditingController();
+  late TextEditingController _addressLine1Controller;
+  late TextEditingController _addressLine2Controller;
+  late TextEditingController _districtController;
+  late TextEditingController _stateController;
+  late TextEditingController _postalCodeController;
 
   bool isLoading = true;
   DocumentReference? userDocRef;
@@ -25,6 +27,21 @@ class _EditAddressPageState extends State<EditAddressPage> {
   @override
   void initState() {
     super.initState();
+
+    _addressLine1Controller = TextEditingController(
+      text: widget.address['line1'],
+    );
+    _addressLine2Controller = TextEditingController(
+      text: widget.address['line2'],
+    );
+    _districtController = TextEditingController(
+      text: widget.address['district'],
+    );
+    _stateController = TextEditingController(text: widget.address['state']);
+    _postalCodeController = TextEditingController(
+      text: widget.address['postcode'],
+    );
+
     _loadUserAddress();
   }
 
@@ -33,16 +50,11 @@ class _EditAddressPageState extends State<EditAddressPage> {
     if (email == null) return;
 
     try {
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
+      userDocRef = FirebaseFirestore.instance.collection('users').doc(email);
+      final snapshot = await userDocRef!.get();
 
-      if (query.docs.isNotEmpty) {
-        final data = query.docs.first.data() as Map<String, dynamic>;
-        userDocRef = query.docs.first.reference;
-
+      if (snapshot.exists) {
+        final data = snapshot.data() as Map<String, dynamic>;
         setState(() {
           _addressLine1Controller.text = data['addressLine1'] ?? '';
           _addressLine2Controller.text = data['addressLine2'] ?? '';
@@ -52,31 +64,22 @@ class _EditAddressPageState extends State<EditAddressPage> {
           isLoading = false;
         });
       } else {
-        setState(() {
-          isLoading = false;
-        });
+        setState(() => isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("User document not found! Cannot update.")),
+          const SnackBar(content: Text("User document not found!")),
         );
       }
     } catch (e) {
-      setState(() {
-        isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error loading address: $e")),
-      );
+      setState(() => isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
   Future<void> _saveAddress() async {
     if (!_formKey.currentState!.validate()) return;
-    if (userDocRef == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("User document not found! Cannot update.")),
-      );
-      return;
-    }
+    if (userDocRef == null) return;
 
     final updatedAddress = {
       "addressLine1": _addressLine1Controller.text.trim(),
@@ -88,12 +91,12 @@ class _EditAddressPageState extends State<EditAddressPage> {
     };
 
     try {
-      await userDocRef!.update(updatedAddress);
-      Navigator.pop(context, updatedAddress);
+      await userDocRef!.set(updatedAddress, SetOptions(merge: true));
+      Navigator.pop(context, updatedAddress); // return updated map
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error updating address: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error updating: $e")));
     }
   }
 
@@ -110,6 +113,7 @@ class _EditAddressPageState extends State<EditAddressPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color.fromARGB(255, 240, 240, 241),
       appBar: AppBar(title: const Text("Edit Address")),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())

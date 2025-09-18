@@ -1,4 +1,3 @@
-
 import 'dart:io';
 import 'edit_profile_page.dart';
 
@@ -27,17 +26,38 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadUserProfile() async {
-    String uid = FirebaseAuth.instance.currentUser!.uid;
-    DocumentSnapshot doc =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    String? email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null) return;
 
-    if (doc.exists) {
-      final data = doc.data() as Map<String, dynamic>;
-      setState(() {
-        _photoUrl = data['photoUrl'];
-        _name = data['name'] ?? "No Name";
-        _loading = false;
-      });
+    try {
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(email)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _photoUrl = data['photoUrl'];
+          _name = data['name'] ?? "No Name";
+          _loading = false;
+        });
+      } else {
+        // If somehow doc doesn't exist, create it
+        await FirebaseFirestore.instance.collection('users').doc(email).set({
+          "email": email,
+          "name": "",
+          "photoUrl": null,
+        });
+        setState(() {
+          _photoUrl = null;
+          _name = "No Name";
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading profile: $e");
+      setState(() => _loading = false);
     }
   }
 
@@ -48,19 +68,17 @@ class _ProfilePageState extends State<ProfilePage> {
     if (pickedFile == null) return;
 
     File file = File(pickedFile.path);
-    String uid = FirebaseAuth.instance.currentUser!.uid;
+    String? email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null) return;
 
     try {
-      // Upload to Firebase Storage
-      final ref =
-          FirebaseStorage.instance.ref().child('profilePictures/$uid.jpg');
+      final ref = FirebaseStorage.instance.ref().child(
+        'profilePictures/$email.jpg',
+      );
       await ref.putFile(file);
-
-      // Get download URL
       String downloadUrl = await ref.getDownloadURL();
 
-      // Save to Firestore
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+      await FirebaseFirestore.instance.collection('users').doc(email).update({
         'photoUrl': downloadUrl,
       });
 
@@ -118,8 +136,11 @@ class _ProfilePageState extends State<ProfilePage> {
                                   : null,
                               backgroundColor: Colors.grey[300],
                               child: _photoUrl == null
-                                  ? const Icon(Icons.person,
-                                      size: 40, color: Colors.white)
+                                  ? const Icon(
+                                      Icons.person,
+                                      size: 40,
+                                      color: Colors.white,
+                                    )
                                   : null,
                             ),
                           ),
@@ -140,30 +161,35 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ),
                                 const SizedBox(height: 8),
                                 ElevatedButton(
-  onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const EditProfilePage()),
-    );
-  },
-  style: ElevatedButton.styleFrom(
-    backgroundColor: Colors.blue[500],
-    foregroundColor: Colors.white,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(10),
-    ),
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-    elevation: 3,
-  ),
-  child: const Text(
-    "EDIT",
-    style: TextStyle(
-      fontSize: 14,
-      fontWeight: FontWeight.w500,
-    ),
-  ),
-)
-
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const EditProfilePage(),
+                                      ),
+                                    );
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue[500],
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 10,
+                                    ),
+                                    elevation: 3,
+                                  ),
+                                  child: const Text(
+                                    "EDIT",
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -205,12 +231,21 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: Column(
                         children: const [
                           ActivityItem(
-                              time: "7:45pm", action: "Turn on room lights"),
-                          ActivityItem(time: "8:30pm", action: "Open parcel box"),
+                            time: "7:45pm",
+                            action: "Turn on room lights",
+                          ),
                           ActivityItem(
-                              time: "8:45pm", action: "Retract clothe hanger"),
+                            time: "8:30pm",
+                            action: "Open parcel box",
+                          ),
                           ActivityItem(
-                              time: "9:00pm", action: "Turn off room lights"),
+                            time: "8:45pm",
+                            action: "Retract clothe hanger",
+                          ),
+                          ActivityItem(
+                            time: "9:00pm",
+                            action: "Turn off room lights",
+                          ),
                         ],
                       ),
                     ),
@@ -248,10 +283,7 @@ class ActivityItem extends StatelessWidget {
           Expanded(
             child: Text(
               action,
-              style: const TextStyle(
-                color: Colors.black87,
-                fontSize: 16,
-              ),
+              style: const TextStyle(color: Colors.black87, fontSize: 16),
             ),
           ),
         ],

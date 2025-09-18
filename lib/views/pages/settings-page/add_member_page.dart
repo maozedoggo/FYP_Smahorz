@@ -84,6 +84,7 @@ class _AddMemberPageState extends State<AddMemberPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color.fromARGB(255, 240, 240, 241),
       appBar: AppBar(title: const Text("Add Household Member")),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
