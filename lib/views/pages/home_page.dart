@@ -8,7 +8,6 @@ import 'package:flutter_advanced_drawer/flutter_advanced_drawer.dart';
 
 // Paths
 import 'package:smart_horizon_home/services/weather_services.dart';
-import 'package:smart_horizon_home/ui/drawer_backdrop.dart';
 import 'package:smart_horizon_home/ui/view_devices.dart';
 import 'package:smart_horizon_home/views/pages/notification-page/notification_page.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/clothe_hanger.dart';
