@@ -1,14 +1,12 @@
-// Libraries
 import 'dart:ui';
-
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_advanced_drawer/flutter_advanced_drawer.dart';
-
-// Paths
-import 'package:smart_horizon_home/services/weather_services.dart';
 import 'package:smart_horizon_home/ui/view_devices.dart';
+
+
+import 'package:smart_horizon_home/services/weather_services.dart';
 import 'package:smart_horizon_home/views/pages/notification-page/notification_page.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/clothe_hanger.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/parcel_outside.dart';
@@ -25,32 +23,22 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // Access weather service class
   final WeatherService weatherAPI = WeatherService();
+  bool _isLoadingWeather = true;
+  String _cityName = "City";
+  int _temp = 0;
+  String _stateName = "State";
 
-  // Padding's variables
-  final double horizontalPadding = 40.0;
-  final double verticalPadding = 20.0;
-
-  // List of Smart Devices [Name, Part, Icon, Status]
   final List<List<dynamic>> smartDevices = [
     ["Parcel Box", "Outside", "lib/icons/door-open.png", true],
     ["Parcel Box", "Inside", "lib/icons/door-open.png", true],
     ["Cloth Hanger", "", "lib/icons/drying-rack.png", true],
   ];
-
-  // List of smartdevices pages
   final List<Widget> devicePages = const [
     ParcelFront(),
     ParcelBack(),
     ClotheHanger(),
   ];
-
-  // Fetch weather data
-  bool _isLoadingWeather = true;
-  String _cityName = "City";
-  int _temp = 0;
-  String _stateName = "State";
 
   @override
   void initState() {
@@ -63,6 +51,7 @@ class _HomePageState extends State<HomePage> {
       await weatherAPI.fetchData();
       await weatherAPI.callApi();
 
+      if (!mounted) return;
       setState(() {
         _stateName = weatherAPI.stateName ?? "Unknown";
         _cityName = weatherAPI.cityName ?? "Unknown";
@@ -75,17 +64,14 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // Smart Device Switch
   void powerSwitchChanged(bool value, int index) {
     setState(() {
       smartDevices[index][3] = value;
     });
   }
 
-  // Sign out
   Future<void> _signout() async {
     await FirebaseAuth.instance.signOut();
-
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
@@ -98,6 +84,15 @@ class _HomePageState extends State<HomePage> {
     final userEmail = FirebaseAuth.instance.currentUser?.email;
     final drawerController = AdvancedDrawerController();
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    final horizontalPadding = screenWidth * 0.05;
+    final verticalPadding = screenHeight * 0.02;
+    final iconSize = screenWidth * 0.08;
+    final titleFontSize = screenWidth * 0.08;
+    final subtitleFontSize = screenWidth * 0.05;
+
     return PopScope(
       canPop: false,
       child: AdvancedDrawer(
@@ -108,7 +103,6 @@ class _HomePageState extends State<HomePage> {
         animateChildDecoration: true,
         childDecoration: BoxDecoration(borderRadius: BorderRadius.circular(20)),
         backdropColor: const Color.fromARGB(255, 22, 22, 22),
-
         drawer: Container(
           color: const Color.fromARGB(255, 36, 36, 36),
           child: SafeArea(
@@ -133,7 +127,7 @@ class _HomePageState extends State<HomePage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => ProfilePage(),
+                                builder: (_) => ProfilePage(),
                               ),
                             );
                           },
@@ -146,7 +140,7 @@ class _HomePageState extends State<HomePage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => SettingsPage(),
+                                builder: (_) => SettingsPage(),
                               ),
                             );
                           },
@@ -158,23 +152,26 @@ class _HomePageState extends State<HomePage> {
                   ),
                   Center(
                     child: TextButton.icon(
-                      style: ButtonStyle(
-                        animationDuration: const Duration(milliseconds: 250),
-                      ),
                       onPressed: _signout,
                       icon: Icon(
                         Icons.logout_rounded,
                         color: Colors.red[700],
-                        size: 28,
+                        size: iconSize,
                       ),
                       label: Text(
                         "Logout",
-                        style: TextStyle(color: Colors.red[700], fontSize: 18),
+                        style: TextStyle(
+                          color: Colors.red[700],
+                          fontSize: subtitleFontSize,
+                        ),
                       ),
                     ),
                   ),
                   DefaultTextStyle(
-                    style: const TextStyle(fontSize: 14, color: Colors.white),
+                    style: TextStyle(
+                      fontSize: screenWidth * 0.03,
+                      color: Colors.white,
+                    ),
                     child: Container(
                       margin: const EdgeInsets.symmetric(vertical: 16.0),
                       child: const Text('Smart Horizon Home'),
@@ -185,9 +182,10 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ),
-
         child: Scaffold(
           body: Container(
+            width: double.infinity,
+            height: double.infinity,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -207,77 +205,67 @@ class _HomePageState extends State<HomePage> {
                   // Top bar
                   Padding(
                     padding: EdgeInsets.symmetric(
-                      horizontal: 30,
+                      horizontal: horizontalPadding,
                       vertical: verticalPadding,
                     ),
                     child: Row(
                       children: [
-                        Builder(
-                          builder: (context) => IconButton(
-                            icon: const Icon(
-                              Icons.menu,
-                              size: 35,
-                              color: Colors.white,
-                            ),
-                            onPressed: () => drawerController.toggleDrawer(),
+                        IconButton(
+                          icon: Icon(
+                            Icons.menu,
+                            size: iconSize,
+                            color: Colors.white,
                           ),
+                          onPressed: () => drawerController.toggleDrawer(),
                         ),
                         const Spacer(),
-                        Builder(
-                          builder: (context) => IconButton(
-                            icon: const Icon(
-                              Icons.notifications,
-                              size: 35,
-                              color: Colors.white,
-                            ),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => NotificationPage(),
-                                ),
-                              );
-                            },
+                        IconButton(
+                          icon: Icon(
+                            Icons.notifications,
+                            size: iconSize,
+                            color: Colors.white,
                           ),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => NotificationPage(),
+                              ),
+                            );
+                          },
                         ),
-                        Builder(
-                          builder: (context) => IconButton(
-                            icon: const Icon(
-                              Icons.add_circle,
-                              size: 35,
-                              color: Colors.white,
-                            ),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => NotificationPage(),
-                                ),
-                              );
-                            },
+                        IconButton(
+                          icon: Icon(
+                            Icons.add_circle,
+                            size: iconSize,
+                            color: Colors.white,
                           ),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => NotificationPage(),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
                   ),
 
-                  const SizedBox(height: 10),
-
                   // Welcome text
                   Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           "Welcome Home",
                           style: TextStyle(
-                            fontSize: 34,
+                            fontSize: titleFontSize,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
-                            shadows: [
+                            shadows: const [
                               Shadow(
                                 blurRadius: 4,
                                 color: Colors.black54,
@@ -295,32 +283,31 @@ class _HomePageState extends State<HomePage> {
                             builder: (context, snapshot) {
                               if (snapshot.connectionState ==
                                   ConnectionState.waiting) {
-                                return const Text(
+                                return Text(
                                   "...",
                                   style: TextStyle(
-                                    fontSize: 26,
+                                    fontSize: subtitleFontSize,
                                     color: Colors.white70,
                                   ),
                                 );
                               }
                               if (!snapshot.hasData || !snapshot.data!.exists) {
-                                return const Text(
+                                return Text(
                                   "No username",
                                   style: TextStyle(
-                                    fontSize: 26,
+                                    fontSize: subtitleFontSize,
                                     color: Colors.white70,
                                   ),
                                 );
                               }
                               final data =
-                                  snapshot.data!.data()
-                                      as Map<String, dynamic>?;
+                                  snapshot.data!.data() as Map<String, dynamic>?;
                               return Text(
                                 data?['username'] ?? "",
-                                style: const TextStyle(
-                                  fontSize: 26,
+                                style: TextStyle(
+                                  fontSize: subtitleFontSize,
                                   color: Colors.white,
-                                  shadows: [
+                                  shadows: const [
                                     Shadow(
                                       blurRadius: 2,
                                       color: Colors.black54,
@@ -332,10 +319,10 @@ class _HomePageState extends State<HomePage> {
                             },
                           )
                         else
-                          const Text(
+                          Text(
                             "Not logged in",
                             style: TextStyle(
-                              fontSize: 26,
+                              fontSize: subtitleFontSize,
                               color: Colors.white70,
                             ),
                           ),
@@ -343,9 +330,9 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
 
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(
-                      horizontal: 40.0,
+                      horizontal: horizontalPadding,
                       vertical: 8,
                     ),
                     child: Divider(thickness: 3, color: Colors.white38),
@@ -353,33 +340,30 @@ class _HomePageState extends State<HomePage> {
 
                   // Weather container
                   Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                      vertical: 15,
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(screenWidth * 0.05),
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Color.fromRGBO(255, 255, 255, 0.2),
-                            borderRadius: BorderRadius.circular(20),
+                            color: const Color.fromRGBO(255, 255, 255, 0.2),
+                            borderRadius: BorderRadius.circular(screenWidth * 0.05),
+                            border: Border.all(
+                              color: const Color.fromRGBO(255, 255, 255, 0.2),
+                              width: 1,
+                            ),
                             boxShadow: [
                               BoxShadow(
-                                color: Color.fromRGBO(255, 255, 255, 0.25),
+                                color: const Color.fromRGBO(255, 255, 255, 0.25),
                                 blurRadius: 12,
                                 offset: const Offset(0, 6),
                               ),
                             ],
-                            border: Border.all(
-                              color: Color.fromRGBO(255, 255, 255, 0.2),
-                              width: 1,
-                            ),
                           ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 15,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: screenWidth * 0.05,
+                            vertical: screenHeight * 0.02,
                           ),
                           child: _isLoadingWeather
                               ? const Center(
@@ -391,29 +375,29 @@ class _HomePageState extends State<HomePage> {
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.cloud,
-                                      size: 60,
+                                      size: screenWidth * 0.15,
                                       color: Colors.white,
                                     ),
                                     Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        const Text(
+                                        Text(
                                           "Weather",
                                           style: TextStyle(
-                                            fontSize: 20,
+                                            fontSize: subtitleFontSize,
                                             color: Colors.white,
                                           ),
                                         ),
                                         Text(
                                           "$_temp°C",
-                                          style: const TextStyle(
-                                            fontSize: 30,
+                                          style: TextStyle(
+                                            fontSize: subtitleFontSize * 1.5,
                                             fontWeight: FontWeight.bold,
                                             color: Colors.white,
-                                            shadows: [
+                                            shadows: const [
                                               Shadow(
                                                 blurRadius: 4,
                                                 color: Colors.black45,
@@ -425,8 +409,8 @@ class _HomePageState extends State<HomePage> {
                                       ],
                                     ),
                                     ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 120,
+                                      constraints: BoxConstraints(
+                                        maxWidth: screenWidth * 0.3,
                                       ),
                                       child: Column(
                                         crossAxisAlignment:
@@ -434,18 +418,18 @@ class _HomePageState extends State<HomePage> {
                                         children: [
                                           Text(
                                             _cityName,
-                                            style: const TextStyle(
-                                              fontSize: 20,
+                                            style: TextStyle(
+                                              fontSize: subtitleFontSize,
                                               color: Colors.white,
                                             ),
                                           ),
                                           Text(
                                             _stateName,
-                                            style: const TextStyle(
-                                              fontSize: 28,
+                                            style: TextStyle(
+                                              fontSize: subtitleFontSize * 1.5,
                                               fontWeight: FontWeight.bold,
                                               color: Colors.white,
-                                              shadows: [
+                                              shadows: const [
                                                 Shadow(
                                                   blurRadius: 4,
                                                   color: Colors.black54,
@@ -466,23 +450,26 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
 
+                  // Devices grid
                   Expanded(
                     child: GridView.builder(
-                      physics: const NeverScrollableScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 25),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: horizontalPadding,
+                      ),
                       itemCount: smartDevices.length,
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.8,
-                          ),
+                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: screenWidth * 0.5,
+                        childAspectRatio: 0.8,
+                        mainAxisSpacing: screenHeight * 0.02,
+                        crossAxisSpacing: screenWidth * 0.03,
+                      ),
                       itemBuilder: (context, index) {
                         return GestureDetector(
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => devicePages[index],
+                                builder: (_) => devicePages[index],
                               ),
                             );
                           },

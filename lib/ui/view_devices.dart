@@ -20,79 +20,80 @@ class ViewDevices extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    final deviceFontSize = screenWidth * 0.045;
+    final partFontSize = screenWidth * 0.035;
+    final iconSize = screenWidth * 0.15;
+
     return Padding(
-      padding: const EdgeInsets.all(15),
+      padding: EdgeInsets.all(screenWidth * 0.03),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(screenWidth * 0.05),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
           child: Container(
             decoration: BoxDecoration(
-              color: Color.fromRGBO(255, 255, 255, 0.2),
-              borderRadius: BorderRadius.circular(20),
+              color: const Color.fromRGBO(255, 255, 255, 0.2),
+              borderRadius: BorderRadius.circular(screenWidth * 0.05),
               border: Border.all(
-                color: Color.fromRGBO(255, 255, 255, 0.2),
+                color: const Color.fromRGBO(255, 255, 255, 0.2),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Color.fromRGBO(255, 255, 255, 0.2),
+                  color: const Color.fromRGBO(255, 255, 255, 0.2),
                   blurRadius: 10,
-                  offset: const Offset(0, 4),
+                  offset: Offset(0, screenHeight * 0.01),
                 ),
               ],
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 12),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  //Type of Devices
-                  Text(
-                    deviceType,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(
-                          blurRadius: 3,
-                          color: Colors.black54,
-                          offset: Offset(1, 1),
-                        ),
-                      ],
-                    ),
+            padding: EdgeInsets.symmetric(
+              vertical: screenHeight * 0.02,
+              horizontal: screenWidth * 0.03,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  deviceType,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: deviceFontSize,
+                    color: Colors.white,
+                    shadows: const [
+                      Shadow(
+                        blurRadius: 3,
+                        color: Colors.black54,
+                        offset: Offset(1, 1),
+                      ),
+                    ],
                   ),
-
-                  //Icons
-                  Image.asset(iconPath, height: 65, color: Colors.white),
-
-                  //Part of Devices + Switch
-                  Padding(
-                    padding: const EdgeInsets.only(left: 5.0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            devicePart,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                              color: Colors.white,
-                            ),
-                          ),
+                  textAlign: TextAlign.center,
+                ),
+                Image.asset(iconPath, height: iconSize, color: Colors.white),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        devicePart,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: partFontSize,
+                          color: Colors.white,
                         ),
-                        CupertinoSwitch(
-                          value: status,
-                          onChanged: onChanged,
-                          activeTrackColor: Colors.tealAccent,
-                          inactiveThumbColor: Colors.white,
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                    CupertinoSwitch(
+                      value: status,
+                      onChanged: onChanged,
+                      activeTrackColor: Colors.tealAccent,
+                      inactiveThumbColor: Colors.white,
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
