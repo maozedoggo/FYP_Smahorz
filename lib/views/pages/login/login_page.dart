@@ -29,12 +29,14 @@ class _LoginPageState extends State<LoginPage> {
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
+        backgroundColor: Colors.black87, // darker dialog to match theme
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        content: Text(message, style: const TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text("OK"),
+            child: const Text("OK", style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -74,7 +76,6 @@ class _LoginPageState extends State<LoginPage> {
         password: password,
       );
 
-
       _showPopup("Success", "Login successful!");
 
       Navigator.pushReplacement(
@@ -92,10 +93,10 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // UI
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true, // let gradient cover behind status bar
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
@@ -107,111 +108,208 @@ class _LoginPageState extends State<LoginPage> {
               // LOGIN title
               const Text(
                 "LOGIN",
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 45,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white, // white text to contrast gradient
+                  shadows: [
+                    Shadow(
+                      offset: Offset(
+                        2,
+                        2,
+                      ), // how far the shadow is moved (x, y)
+                      blurRadius: 4, // how soft the shadow looks
+                      color: Colors.black54, // shadow color
+                    ),
+                  ],
+                ),
               ),
 
               const SizedBox(height: 50),
 
-              // Username label
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "USERNAME",
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              Container(
+                width: double.infinity, // ✅ full width
+                padding: const EdgeInsets.all(25),
+                decoration: BoxDecoration(
+                  color: Colors.white, // ✅ fully white container
+                  borderRadius: BorderRadius.circular(16),
                 ),
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: loginIdController,
-                decoration: InputDecoration(
-                  hintText: "EMAIL/USERNAME",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Password label
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "PASSWORD",
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: passwordController,
-                obscureText: !showPassword,
-                decoration: InputDecoration(
-                  hintText: "PASSWORD",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      showPassword ? Icons.visibility : Icons.visibility_off,
-                    ),
-                    onPressed: () =>
-                        setState(() => showPassword = !showPassword),
-                  ),
-                ),
-              ),
-
-              // Forgot Password
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ForgotPasswordPage(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Username label
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "USERNAME",
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black, // ✅ changed to black
+                        ),
                       ),
-                    );
-                  },
-                  child: const Text('Forgot Password?'),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // Login button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _login,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.redAccent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
                     ),
-                  ),
-                  child: const Text(
-                    'Login',
-                    style: TextStyle(fontSize: 16, color: Colors.white),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              // Sign Up prompt
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("Don’t have an account? "),
-                  TextButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SignUpPage()),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: loginIdController,
+                      style: const TextStyle(
+                        color: Colors.black,
+                      ), // ✅ text inside black
+                      decoration: InputDecoration(
+                        hintText: "EMAIL/USERNAME",
+                        hintStyle: const TextStyle(
+                          color: Colors.black54,
+                        ), // ✅ darker hint
+                        filled: true,
+                        fillColor: Colors.black.withOpacity(
+                          0.05,
+                        ), // ✅ light grey background
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                            color: Colors.black,
+                            width: 1,
+                          ), // ✅ black outline
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                            color: Colors.black,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
                     ),
-                    child: const Text("Sign Up"),
-                  ),
-                ],
+
+                    const SizedBox(height: 24),
+
+                    // Password label
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "PASSWORD",
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black, // ✅ changed to black
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: passwordController,
+                      obscureText: !showPassword,
+                      style: const TextStyle(
+                        color: Colors.black,
+                      ), // ✅ text inside black
+                      decoration: InputDecoration(
+                        hintText: "PASSWORD",
+                        hintStyle: const TextStyle(color: Colors.black54),
+                        filled: true,
+                        fillColor: Colors.black.withOpacity(0.05),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                            color: Colors.black,
+                            width: 1,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                            color: Colors.black,
+                            width: 1.5,
+                          ),
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            showPassword
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                            color: Colors.black54, // ✅ icon color blackish
+                          ),
+                          onPressed: () =>
+                              setState(() => showPassword = !showPassword),
+                        ),
+                      ),
+                    ),
+
+                    // Forgot Password
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ForgotPasswordPage(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Forgot Password?',
+                          style: TextStyle(
+                            color: Colors.black,
+                            decoration: TextDecoration.underline,
+                            fontWeight: FontWeight.bold
+                          ), // ✅ changed to black
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Login button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _login,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: Colors.blue,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Login',
+                          style: TextStyle(fontSize: 16, color: Colors.white),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    // Sign Up prompt
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          "Don’t have an account? ",
+                          style: TextStyle(
+                            color: Colors.black54,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SignUpPage(),
+                            ),
+                          ),
+                          child: const Text(
+                            "Sign Up",
+                            style: TextStyle(
+                              color: Colors.black,
+                              decoration: TextDecoration.underline,
+                              fontWeight: FontWeight.bold
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
