@@ -16,7 +16,7 @@ class SmartHomeApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        scaffoldBackgroundColor: const Color.fromARGB(255, 215, 215, 215),
+        scaffoldBackgroundColor: Colors.transparent,
       ),
       home: LoginPage(),
     );

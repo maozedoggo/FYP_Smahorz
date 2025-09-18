@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:smart_horizon_home/views/pages/smart-devices/schedule_pages/schedule.dart';
 
 class ParcelBack extends StatefulWidget {
+
   const ParcelBack({super.key});
 
   @override
@@ -10,6 +12,7 @@ class ParcelBack extends StatefulWidget {
 class _ParcelBackState extends State<ParcelBack> {
   // State variable
   bool isUnlocked = false;
+  String deviceName = "Parcel Inside";
 
   void toggleUnlock() {
     setState(() {
@@ -25,45 +28,50 @@ class _ParcelBackState extends State<ParcelBack> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // Back button
-            Align(
-              alignment: Alignment.topLeft,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios),
-                color: Colors.white,
-                onPressed: () {
-                  Navigator.pop(context); // go back to previous page
-                },
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30.0),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  color: Colors.black,
+                  onPressed: () {
+                    Navigator.pop(context); // go back to previous page
+                  },
+                ),
               ),
-            ),
-
-            const SizedBox(height: 10),
-
-            // Top Text
-            const Text(
-              "Security right on the palm of your hand",
-              style: TextStyle(color: Colors.white, fontSize: 14),
-              textAlign: TextAlign.center,
             ),
 
             const SizedBox(height: 40),
 
             // Outside Door Button
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 30),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade700,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.meeting_room, color: Colors.orange, size: 40),
-                  SizedBox(width: 10),
-                  Text(
-                    "Outside Door",
-                    style: TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 15,
+                  horizontal: 30,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade700,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.max,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.meeting_room, color: Colors.orange, size: 40),
+                    SizedBox(width: 10),
+                    Text(
+                      "Outside Door",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -93,7 +101,12 @@ class _ParcelBackState extends State<ParcelBack> {
             // Add Schedule Button
             ElevatedButton.icon(
               onPressed: () {
-                // TODO: implement navigation to schedule page
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SchedulePage(deviceName: deviceName),
+                  ),
+                );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.grey.shade700,

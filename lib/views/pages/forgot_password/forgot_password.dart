@@ -25,12 +25,14 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
+        backgroundColor: Colors.black87,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        content: Text(message, style: const TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
+            child: const Text("OK", style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -121,99 +123,165 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Top Back Button
-              Align(
-                alignment: Alignment.topLeft,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Title
-              const Text(
-                "FORGOT PASSWORD",
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              // Instruction
-              const Text(
-                "Enter your email or username to reset your password.",
-                style: TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 30),
-
-              // Email / Username input
-              TextField(
-                controller: _userController,
-                decoration: const InputDecoration(
-                  labelText: "Email or Username",
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              // Request reset button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _requestReset,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.redAccent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text(
-                    "Request Password Reset",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-
-              // Resend email button (plain white)
-              if (_emailSent)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _resendEmail,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                        side: const BorderSide(color: Colors.grey),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        "Resend Email",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+      extendBodyBehindAppBar: true,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF0063a1), // #0063a1
+              Color(0xFF0982BA), // rgba(9, 130, 186, 1)
+              Color(0xFF04111C), // rgba(4, 17, 28, 1)
             ],
+            stops: [0.21, 0.41, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Back Button
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: CircleAvatar(
+                    backgroundColor: Colors.white.withAlpha(20),
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Title with shadow
+                const Text(
+                  "FORGOT PASSWORD",
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(
+                        offset: Offset(2, 2),
+                        blurRadius: 4,
+                        color: Colors.black54,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 40),
+
+                // Main White Container
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(25),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
+                      )
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Enter your email or username to reset your password.",
+                        style: TextStyle(fontSize: 16, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Input Field
+                      TextField(
+                        controller: _userController,
+                        style: const TextStyle(color: Colors.black),
+                        decoration: InputDecoration(
+                          hintText: "Email or Username",
+                          hintStyle: const TextStyle(color: Colors.black54),
+                          filled: true,
+                          fillColor: Colors.black.withAlpha(20),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Colors.black,
+                              width: 1,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Colors.black,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+
+                      // Request reset button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _requestReset,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: Colors.blue,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text(
+                            "Request Password Reset",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Resend email button
+                      if (_emailSent)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              onPressed: _resendEmail,
+                              style: OutlinedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                side: const BorderSide(color: Colors.black54),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Text(
+                                "Resend Email",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
