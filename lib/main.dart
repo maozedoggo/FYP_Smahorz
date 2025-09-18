@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import 'views/pages/login/login_page.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:smart_horizon_home/views/pages/login/login_page.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(); //Initialize Firebase
   runApp(const SmartHomeApp());
 }
 
@@ -12,8 +15,10 @@ class SmartHomeApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(scaffoldBackgroundColor: Colors.transparent),
-      home: LoginPage(), // Start with login page
+      theme: ThemeData(
+        scaffoldBackgroundColor: Colors.transparent,
+      ),
+      home: LoginPage(),
     );
   }
 }
