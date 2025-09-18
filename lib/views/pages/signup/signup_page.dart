@@ -384,295 +384,290 @@ class _SignUpPageState extends State<SignUpPage> {
         : DateFormat('yyyy-MM-dd').format(selectedDOB!);
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0063a1), Color(0xFF0982BA), Color(0xFF04111C)],
-            stops: [0.21, 0.41, 1.0],
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            automaticallyImplyLeading: false,
+            pinned: false,
+            expandedHeight: 200,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFF0063a1),
+                      Color(0xFF0982BA),
+                      Color(0xFF04111C),
+                    ],
+                    stops: [0.21, 0.41, 1.0],
+                  ),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 20,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: Colors.white.withAlpha(30),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back,
+                              color: Colors.white,
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ),
+                        const Center(
+                          child: Text(
+                            "SIGN UP",
+                            style: TextStyle(
+                              fontSize: 40,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              Padding(
+          SliverToBoxAdapter(
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(28),
+                  topRight: Radius.circular(28),
+                ),
+              ),
+              child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
-                  vertical: 20,
+                  vertical: 24,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.white.withAlpha(30),
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
+                    const Text(
+                      "NAME",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        hintText: "Full Name",
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLength: 40,
+                    ),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      "PHONE",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        DropdownButton<String>(
+                          value: selectedCountryCode,
+                          items: countryCodes
+                              .map(
+                                (c) =>
+                                    DropdownMenuItem(value: c, child: Text(c)),
+                              )
+                              .toList(),
+                          onChanged: (v) =>
+                              setState(() => selectedCountryCode = v ?? '+60'),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: phoneController,
+                            decoration: const InputDecoration(
+                              hintText: "Phone Number",
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.phone,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      "EMAIL",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: emailController,
+                      decoration: const InputDecoration(
+                        hintText: "Email Address",
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      "ADDRESS LINE 1",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: addressLine1Controller,
+                      decoration: const InputDecoration(
+                        hintText: "Address Line 1",
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    const Center(
-                      child: Text(
-                        "SIGN UP",
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      "ADDRESS LINE 2 (OPTIONAL)",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: addressLine2Controller,
+                      decoration: const InputDecoration(
+                        hintText: "Address Line 2",
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      "STATE",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                      value: selectedState,
+                      items: malaysianStates
+                          .map(
+                            (s) => DropdownMenuItem(value: s, child: Text(s)),
+                          )
+                          .toList(),
+                      onChanged: (v) {
+                        setState(() {
+                          selectedState = v;
+                          selectedDistrict = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      "DISTRICT",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                      value: selectedDistrict,
+                      items:
+                          (selectedState == null
+                                  ? <String>[]
+                                  : districtsByState[selectedState] ??
+                                        <String>[])
+                              .map(
+                                (d) =>
+                                    DropdownMenuItem(value: d, child: Text(d)),
+                              )
+                              .toList(),
+                      onChanged: (v) => setState(() => selectedDistrict = v),
+                    ),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      "POSTAL CODE",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: postalCodeController,
+                      decoration: const InputDecoration(
+                        hintText: "Postal Code",
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      "COUNTRY",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: countryController,
+                      decoration: const InputDecoration(
+                        hintText: "Country",
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) =>
+                          setState(() => selectedCountry = value),
+                    ),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      "DATE OF BIRTH",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(child: Text(dobText)),
+                        TextButton(
+                          onPressed: _pickDateOfBirth,
+                          child: const Text('Select'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 30),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: createaccount,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: Colors.blue,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Next',
+                          style: TextStyle(fontSize: 16, color: Colors.white),
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-
-              // White container starts here
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(28),
-                      topRight: Radius.circular(28),
-                    ),
-                  ),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 24,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "NAME",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: nameController,
-                          decoration: const InputDecoration(
-                            hintText: "Full Name",
-                            border: OutlineInputBorder(),
-                          ),
-                          maxLength: 40,
-                        ),
-                        const SizedBox(height: 16),
-
-                        const Text(
-                          "PHONE",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            DropdownButton<String>(
-                              value: selectedCountryCode,
-                              items: countryCodes
-                                  .map(
-                                    (c) => DropdownMenuItem<String>(
-                                      value: c,
-                                      child: Text(c),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (v) => setState(
-                                () => selectedCountryCode = v ?? '+60',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: phoneController,
-                                decoration: const InputDecoration(
-                                  hintText: "Phone Number",
-                                  border: OutlineInputBorder(),
-                                ),
-                                keyboardType: TextInputType.phone,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-
-                        const Text(
-                          "EMAIL",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: emailController,
-                          decoration: const InputDecoration(
-                            hintText: "Email Address",
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.emailAddress,
-                        ),
-                        const SizedBox(height: 16),
-
-                        const Text(
-                          "ADDRESS LINE 1",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: addressLine1Controller,
-                          decoration: const InputDecoration(
-                            hintText: "Address Line 1",
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        const Text(
-                          "ADDRESS LINE 2 (OPTIONAL)",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: addressLine2Controller,
-                          decoration: const InputDecoration(
-                            hintText: "Address Line 2",
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        const Text(
-                          "STATE",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        DropdownButtonFormField<String>(
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                          ),
-                          value: selectedState,
-                          items: malaysianStates
-                              .map<DropdownMenuItem<String>>(
-                                (s) => DropdownMenuItem<String>(
-                                  value: s,
-                                  child: Text(s),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (v) {
-                            setState(() {
-                              selectedState = v;
-                              selectedDistrict = null;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 16),
-
-                        const Text(
-                          "DISTRICT",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        DropdownButtonFormField<String>(
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                          ),
-                          value: selectedDistrict,
-                          items:
-                              (selectedState == null
-                                      ? <String>[]
-                                      : districtsByState[selectedState] ??
-                                            <String>[])
-                                  .map<DropdownMenuItem<String>>(
-                                    (d) => DropdownMenuItem<String>(
-                                      value: d,
-                                      child: Text(d),
-                                    ),
-                                  )
-                                  .toList(),
-                          onChanged: (v) =>
-                              setState(() => selectedDistrict = v),
-                        ),
-                        const SizedBox(height: 16),
-
-                        const Text(
-                          "POSTAL CODE",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: postalCodeController,
-                          decoration: const InputDecoration(
-                            hintText: "Postal Code",
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.number,
-                        ),
-                        const SizedBox(height: 16),
-
-                        const Text(
-                          "COUNTRY",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: countryController,
-                          decoration: const InputDecoration(
-                            hintText: "Country",
-                            border: OutlineInputBorder(),
-                          ),
-                          onChanged: (value) =>
-                              setState(() => selectedCountry = value),
-                        ),
-                        const SizedBox(height: 16),
-
-                        const Text(
-                          "DATE OF BIRTH",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Expanded(child: Text(dobText)),
-                            TextButton(
-                              onPressed: _pickDateOfBirth,
-                              child: const Text('Select'),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 30),
-
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: createaccount,
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: Colors.redAccent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: const Text(
-                              'Next',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
