@@ -30,43 +30,39 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Future<void> _loadUserProfile() async {
-    String? email = FirebaseAuth.instance.currentUser?.email;
+    final user = FirebaseAuth.instance.currentUser;
+    final email = user?.email;
     if (email == null) return;
 
     try {
-      DocumentSnapshot doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(email)
-          .get();
+      DocumentSnapshot doc =
+          await FirebaseFirestore.instance.collection('users').doc(email).get();
 
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
-        _usernameController.text = data['username'] ?? '';
-        _nameController.text = data['name'] ?? '';
-        _emailController.text = email;
         setState(() {
+          _usernameController.text = data['username'] ?? '';
+          _nameController.text = data['name'] ?? '';
+          _emailController.text = email;
           _photoUrl = data['photoUrl'];
           _loading = false;
         });
       } else {
-        // Create empty document if it doesn't exist
-        await FirebaseFirestore.instance.collection('users').doc(email).set({
-          "email": email,
-          "username": "",
-          "name": "",
-          "photoUrl": null,
-        });
         setState(() {
-          _usernameController.text = "";
-          _nameController.text = "";
-          _emailController.text = email;
-          _photoUrl = null;
           _loading = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("User document not found!")),
+        );
       }
     } catch (e) {
+      setState(() {
+        _loading = false;
+      });
       debugPrint("Error loading profile: $e");
-      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error loading profile: $e")),
+      );
     }
   }
 
@@ -85,46 +81,84 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     setState(() => _saving = true);
 
-    String? email = FirebaseAuth.instance.currentUser?.email;
-    if (email == null) return;
-
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final currentEmail = user.email ?? '';
     String? imageUrl = _photoUrl;
 
     try {
       // Upload new profile picture if selected
       if (_newImageFile != null) {
-        final ref = FirebaseStorage.instance.ref().child(
-          'profilePictures/$email.jpg',
-        );
+        final ref =
+            FirebaseStorage.instance.ref().child('profilePictures/$currentEmail.jpg');
         await ref.putFile(_newImageFile!);
         imageUrl = await ref.getDownloadURL();
       }
 
-      // Update Firestore
-      await FirebaseFirestore.instance.collection('users').doc(email).update({
-        'username': _usernameController.text.trim(),
-        'name': _nameController.text.trim(),
-        'photoUrl': imageUrl,
-      });
+      // If email changed → handle carefully
+      final newEmail = _emailController.text.trim();
+      if (newEmail != currentEmail) {
+        try {
+          await user.updateEmail(newEmail);
 
-      // Update email in Firebase Auth if changed
-      if (_emailController.text.trim() != email) {
-        await FirebaseAuth.instance.currentUser!.updateEmail(
-          _emailController.text.trim(),
-        );
+          // Move Firestore doc to new email ID
+          final oldDoc = FirebaseFirestore.instance.collection('users').doc(currentEmail);
+          final newDoc = FirebaseFirestore.instance.collection('users').doc(newEmail);
+
+          final snapshot = await oldDoc.get();
+          if (snapshot.exists) {
+            await newDoc.set({
+              ...snapshot.data() as Map<String, dynamic>,
+              'username': _usernameController.text.trim(),
+              'name': _nameController.text.trim(),
+              'photoUrl': imageUrl,
+            });
+            await oldDoc.delete();
+          }
+        } catch (e) {
+          debugPrint("Error updating email: $e");
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text("Please re-login to update your email.")),
+            );
+          }
+          return;
+        }
+      } else {
+        // Just update existing Firestore doc
+        await FirebaseFirestore.instance.collection('users').doc(currentEmail).update({
+          'username': _usernameController.text.trim(),
+          'name': _nameController.text.trim(),
+          'photoUrl': imageUrl,
+        });
       }
 
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context, {
+          'username': _usernameController.text.trim(),
+          'name': _nameController.text.trim(),
+          'photoUrl': imageUrl,
+        });
+      }
     } catch (e) {
       debugPrint("Error saving profile: $e");
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error saving profile: $e")),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
+    super.dispose();
   }
 
   @override
@@ -140,7 +174,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 key: _formKey,
                 child: ListView(
                   children: [
-                    // Profile Picture
                     Center(
                       child: GestureDetector(
                         onTap: _pickImage,
@@ -149,9 +182,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           backgroundImage: _newImageFile != null
                               ? FileImage(_newImageFile!)
                               : (_photoUrl != null
-                                        ? NetworkImage(_photoUrl!)
-                                        : null)
-                                    as ImageProvider?,
+                                  ? NetworkImage(_photoUrl!)
+                                  : null),
                           backgroundColor: Colors.grey[300],
                           child: (_photoUrl == null && _newImageFile == null)
                               ? const Icon(
@@ -164,47 +196,39 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-
-                    // Username
                     TextFormField(
                       controller: _usernameController,
                       decoration: const InputDecoration(
                         labelText: "Username",
                         border: OutlineInputBorder(),
                       ),
-                      validator: (value) =>
-                          value == null || value.isEmpty ? "Required" : null,
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Required' : null,
                     ),
                     const SizedBox(height: 16),
-
-                    // Name
                     TextFormField(
                       controller: _nameController,
                       decoration: const InputDecoration(
                         labelText: "Name",
                         border: OutlineInputBorder(),
                       ),
-                      validator: (value) =>
-                          value == null || value.isEmpty ? "Required" : null,
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Required' : null,
                     ),
                     const SizedBox(height: 16),
-
-                    // Email
                     TextFormField(
                       controller: _emailController,
                       decoration: const InputDecoration(
                         labelText: "Email",
                         border: OutlineInputBorder(),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return "Required";
-                        if (!value.contains('@')) return "Enter valid email";
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return "Required";
+                        if (!v.contains('@')) return "Enter valid email";
                         return null;
                       },
                     ),
                     const SizedBox(height: 30),
-
-                    // Save Button
                     ElevatedButton(
                       onPressed: _saving ? null : _saveProfile,
                       child: _saving

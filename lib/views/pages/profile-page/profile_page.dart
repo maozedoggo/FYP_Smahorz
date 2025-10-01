@@ -30,10 +30,8 @@ class _ProfilePageState extends State<ProfilePage> {
     if (email == null) return;
 
     try {
-      DocumentSnapshot doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(email)
-          .get();
+      DocumentSnapshot doc =
+          await FirebaseFirestore.instance.collection('users').doc(email).get();
 
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
@@ -43,7 +41,7 @@ class _ProfilePageState extends State<ProfilePage> {
           _loading = false;
         });
       } else {
-        // If somehow doc doesn't exist, create it
+        // If no user document, create a new one
         await FirebaseFirestore.instance.collection('users').doc(email).set({
           "email": email,
           "name": "",
@@ -58,13 +56,15 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       debugPrint("Error loading profile: $e");
       setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error loading profile: $e")),
+      );
     }
   }
 
   Future<void> _pickAndUploadImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
     if (pickedFile == null) return;
 
     File file = File(pickedFile.path);
@@ -72,9 +72,8 @@ class _ProfilePageState extends State<ProfilePage> {
     if (email == null) return;
 
     try {
-      final ref = FirebaseStorage.instance.ref().child(
-        'profilePictures/$email.jpg',
-      );
+      final ref =
+          FirebaseStorage.instance.ref().child('profilePictures/$email.jpg');
       await ref.putFile(file);
       String downloadUrl = await ref.getDownloadURL();
 
@@ -87,6 +86,23 @@ class _ProfilePageState extends State<ProfilePage> {
       });
     } catch (e) {
       debugPrint("Error uploading image: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error uploading image: $e")),
+      );
+    }
+  }
+
+  Future<void> _navigateToEditProfile() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const EditProfilePage()),
+    );
+
+    if (result != null && result is Map<String, dynamic>) {
+      setState(() {
+        _photoUrl = result['photoUrl'] ?? _photoUrl;
+        _name = result['name'] ?? _name;
+      });
     }
   }
 
@@ -161,15 +177,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ),
                                 const SizedBox(height: 8),
                                 ElevatedButton(
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const EditProfilePage(),
-                                      ),
-                                    );
-                                  },
+                                  onPressed: _navigateToEditProfile,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.blue[500],
                                     foregroundColor: Colors.white,
