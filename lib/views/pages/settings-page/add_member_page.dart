@@ -14,7 +14,31 @@ class _AddMemberPageState extends State<AddMemberPage> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  /// 🔹 Sends an invite notification instead of directly adding the member
+  final _fire = FirebaseFirestore.instance;
+  final _auth = FirebaseAuth.instance;
+
+  String? currentUid;
+  String? householdId;
+  String? userRole;
+
+  @override
+  void initState() {
+    super.initState();
+    _initContext();
+  }
+
+  Future<void> _initContext() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    currentUid = user.uid;
+    final userSnap = await _fire.collection('users').doc(currentUid).get();
+    final udata = userSnap.data();
+    setState(() {
+      householdId = udata?['householdId'];
+      userRole = udata?['role'];
+    });
+  }
+
   Future<void> _searchAndInviteMember() async {
     setState(() {
       _isLoading = true;
@@ -22,18 +46,24 @@ class _AddMemberPageState extends State<AddMemberPage> {
     });
 
     try {
+      if (householdId == null) {
+        setState(() => _errorMessage = "You are not in a household.");
+        return;
+      }
+
+      if (!(userRole == 'owner' || userRole == 'admin')) {
+        setState(() => _errorMessage = "Only household owners or admins can invite.");
+        return;
+      }
+
       String username = _usernameController.text.trim();
       if (username.isEmpty) {
         setState(() => _errorMessage = "Please enter a username");
         return;
       }
 
-      // 🔹 Search user by username
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('username', isEqualTo: username)
-          .limit(1)
-          .get();
+      // Search user by username (exact)
+      final query = await _fire.collection('users').where('username', isEqualTo: username).limit(1).get();
 
       if (query.docs.isEmpty) {
         setState(() => _errorMessage = "User not found");
@@ -41,39 +71,42 @@ class _AddMemberPageState extends State<AddMemberPage> {
       }
 
       final userDoc = query.docs.first;
-      final userData = userDoc.data();
-      final toUid = userData['uid']; // invited user
+      final toUid = userDoc.id;
+      final toData = userDoc.data();
 
-      final fromUid = FirebaseAuth.instance.currentUser!.uid; // inviter
-
-      // TODO: Replace with actual householdId (e.g. stored in user profile or passed to page)
-      final householdId = fromUid; // for now, use inviter’s uid as householdId
-
-      // 🔹 Check if an invite already exists
-      final existingInvite = await FirebaseFirestore.instance
-          .collection('notifications')
-          .where('toUid', isEqualTo: toUid)
-          .where('fromUid', isEqualTo: fromUid)
-          .where('householdId', isEqualTo: householdId)
-          .where('status', isEqualTo: 'pending')
-          .get();
-
-      if (existingInvite.docs.isNotEmpty) {
-        setState(() => _errorMessage = "Invite already sent");
+      // Check invited user is not already in a household
+      if (toData['householdId'] != null) {
+        setState(() => _errorMessage = "This user already belongs to a household.");
         return;
       }
 
-      // 🔹 Send invite notification
-      await FirebaseFirestore.instance.collection('notifications').add({
+      final fromUid = currentUid!;
+
+      // Check for existing pending invite
+      final existing = await _fire
+          .collection('householdInvites')
+          .where('toUid', isEqualTo: toUid)
+          .where('householdId', isEqualTo: householdId)
+          .where('status', isEqualTo: 'pending')
+          .limit(1)
+          .get();
+
+      if (existing.docs.isNotEmpty) {
+        setState(() => _errorMessage = "Invite already sent to this user.");
+        return;
+      }
+
+      // Create invite
+      await _fire.collection('householdInvites').add({
         'toUid': toUid,
         'fromUid': fromUid,
         'householdId': householdId,
-        'type': 'household_invite',
         'status': 'pending',
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      Navigator.pop(context, userData['username']); // return invited username
+      if (!mounted) return;
+      Navigator.pop(context, toData['username'] ?? toUid);
     } catch (e) {
       setState(() => _errorMessage = "Error: $e");
     } finally {
@@ -92,14 +125,10 @@ class _AddMemberPageState extends State<AddMemberPage> {
           children: [
             TextField(
               controller: _usernameController,
-              decoration: const InputDecoration(
-                labelText: "Enter username",
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: "Enter username", border: OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
-            if (_errorMessage != null)
-              Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+            if (_errorMessage != null) Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 16),
             _isLoading
                 ? const CircularProgressIndicator()

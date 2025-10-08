@@ -5,8 +5,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class EditAddressPage extends StatefulWidget {
   final Map<String, String> address;
+  final String userRole;
+  const EditAddressPage({
+    super.key,
+    required this.address,
+    required this.userRole,
+  });
 
-  const EditAddressPage({super.key, required this.address});
 
   @override
   State<EditAddressPage> createState() => _EditAddressPageState();
