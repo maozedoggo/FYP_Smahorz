@@ -705,7 +705,15 @@ class _SettingsPageState extends State<SettingsPage> {
         const Text("The owner/admin has full control over household settings and members.", style: TextStyle(color: Colors.grey)),
         const SizedBox(height: 12),
         FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          future: householdDocRef != null ? householdDocRef!.get() : Future.value(null),
+          future: householdDocRef != null
+              ? householdDocRef!.get()
+              : Future.value(
+                  // Create an empty DocumentSnapshot with default values
+                  FirebaseFirestore.instance
+                      .collection('households')
+                      .doc('dummy')
+                      .get(),
+                ),
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) {
               return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator()));
