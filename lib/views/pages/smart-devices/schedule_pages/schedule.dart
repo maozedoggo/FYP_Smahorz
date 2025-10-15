@@ -25,7 +25,7 @@ class _SchedulePageState extends State<SchedulePage> {
               child: Align(
                 alignment: Alignment.topLeft,
                 child: IconButton(
-                  icon: const Icon(Icons.arrow_back),
+                  icon: const Icon(Icons.arrow_back_ios_new),
                   color: Colors.black,
                   onPressed: () {
                     Navigator.pop(context);
