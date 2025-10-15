@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 class SchedulePage extends StatefulWidget {
   final String deviceName;
@@ -13,6 +14,7 @@ class _SchedulePageState extends State<SchedulePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -26,16 +28,18 @@ class _SchedulePageState extends State<SchedulePage> {
                   icon: const Icon(Icons.arrow_back),
                   color: Colors.black,
                   onPressed: () {
-                    Navigator.pop(context); // go back to previous page
+                    Navigator.pop(context);
                   },
                 ),
               ),
             ),
 
             // Calendar
-            Container(
-              
-            )
+            TableCalendar(
+              focusedDay: DateTime.now(),
+              firstDay: DateTime.now(),
+              lastDay: DateTime.utc(2050, 12, 31),
+            ),
           ],
         ),
       ),
