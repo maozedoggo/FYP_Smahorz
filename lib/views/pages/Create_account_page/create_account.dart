@@ -198,7 +198,7 @@ class CreateAccountState extends State<CreateAccount> {
                   const Text(
                     "CREATE ACCOUNT",
                     style: TextStyle(
-                      fontSize: 26,
+                      fontSize: 30,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
@@ -248,7 +248,9 @@ class CreateAccountState extends State<CreateAccount> {
                         TextField(
                           controller: usernameController,
                           decoration: const InputDecoration(
-                            labelText: 'Username',
+                            prefixIconColor: Colors.black54,
+                            prefixIcon: Icon(Icons.person),
+                            hintText: "USERNAME",
                             border: OutlineInputBorder(),
                           ),
                         ),
@@ -259,7 +261,9 @@ class CreateAccountState extends State<CreateAccount> {
                           controller: passwordController,
                           obscureText: !showPassword,
                           decoration: InputDecoration(
-                            labelText: 'Password',
+                            prefixIconColor: Colors.black54,
+                            prefixIcon: Icon(Icons.key),
+                            hintText: "PASSWORD",
                             border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                               icon: Icon(
@@ -279,7 +283,9 @@ class CreateAccountState extends State<CreateAccount> {
                           controller: confirmPasswordController,
                           obscureText: !showConfirm,
                           decoration: InputDecoration(
-                            labelText: 'Confirm Password',
+                            prefixIconColor: Colors.black54,
+                            prefixIcon: Icon(Icons.key),
+                            hintText: "CONFIRM PASSWORD",
                             border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                               icon: Icon(
