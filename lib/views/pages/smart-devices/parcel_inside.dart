@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/schedule_pages/schedule.dart';
 
 class ParcelBack extends StatefulWidget {
-
   const ParcelBack({super.key});
 
   @override
@@ -111,7 +110,12 @@ class _ParcelBackState extends State<ParcelBack> {
               // Add Schedule Button
               ElevatedButton.icon(
                 onPressed: () {
-                  // TODO: implement navigation to schedule page
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SchedulePage(deviceName: deviceName),
+                    ),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey.shade700,

@@ -110,7 +110,6 @@ class CreateAccountState extends State<CreateAccount> {
     }
 
     try {
-      
       // === 1. Check if username already exists ===
       final usernameQuery = await FirebaseFirestore.instance
           .collection('users')
@@ -119,21 +118,24 @@ class CreateAccountState extends State<CreateAccount> {
           .get();
 
       if (usernameQuery.docs.isNotEmpty) {
-        _showPopup('Error', 'Username already taken, please choose another one.');
+        _showPopup(
+          'Error',
+          'Username already taken, please choose another one.',
+        );
         return;
       }
 
       // === 2. Create Firebase Authentication account ===
-      UserCredential userCredential =
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: widget.email,
-        password: passwordController.text.trim(),
-      );
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+            email: widget.email,
+            password: passwordController.text.trim(),
+          );
 
       // === 3. Save user profile in Firestore (use email as doc ID) ===
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(widget.email)  // ← CHANGED TO USE EMAIL AS DOCUMENT ID
+          .doc(widget.email) // ← CHANGED TO USE EMAIL AS DOCUMENT ID
           .set({
             'uid': userCredential.user!.uid,
             'username': usernameController.text.trim(),
@@ -171,122 +173,154 @@ class CreateAccountState extends State<CreateAccount> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const SignUpPage()),
-            );
-          },
+      body: Container(
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF0063a1), Color(0xFF0982BA), Color(0xFF04111C)],
+            stops: [0.21, 0.41, 1.0],
+          ),
         ),
-        title: const Text('', style: TextStyle(color: Colors.black)),
-      ),
-      body: SingleChildScrollView(
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(height: 20),
+        child: SafeArea(
+          bottom: false,
+          child: SingleChildScrollView(
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 20),
 
-              // Title
-              const Text(
-                "CREATE ACCOUNT",
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 30),
-
-              // User info summary
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Name: ${widget.name}"),
-                    Text("Phone: ${widget.phone}"),
-                    Text("Email: ${widget.email}"),
-                    Text("Address Line 1: ${widget.addressLine1}"),
-                    Text("Address Line 2: ${widget.addressLine2}"),
-                    Text("Postal Code: ${widget.postalCode}"),
-                    Text("State: ${widget.state}"),
-                    Text("District: ${widget.district}"),
-                    Text("Country: ${widget.country}"),
-                    Text("Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}"),
-
-                  ],
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              // Username
-              TextField(
-                controller: usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Password
-              TextField(
-                controller: passwordController,
-                obscureText: !showPassword,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                        showPassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () =>
-                        setState(() => showPassword = !showPassword),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Confirm Password
-              TextField(
-                controller: confirmPasswordController,
-                obscureText: !showConfirm,
-                decoration: InputDecoration(
-                  labelText: 'Confirm Password',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                        showConfirm ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () =>
-                        setState(() => showConfirm = !showConfirm),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              // Create Account button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _submit,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.redAccent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                  // Title
+                  const Text(
+                    "CREATE ACCOUNT",
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                   ),
-                  child: const Text(
-                    "Create Account",
-                    style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold),
+                  const SizedBox(height: 30),
+
+                  // User info summary
+                  Container(
+                    padding: EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20)
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Name: ${widget.name}"),
+                          Text("Phone: ${widget.phone}"),
+                          Text("Email: ${widget.email}"),
+                          Text("Address Line 1: ${widget.addressLine1}"),
+                          Text("Address Line 2: ${widget.addressLine2}"),
+                          Text("Postal Code: ${widget.postalCode}"),
+                          Text("State: ${widget.state}"),
+                          Text("District: ${widget.district}"),
+                          Text("Country: ${widget.country}"),
+                          Text(
+                            "Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}",
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 30),
+
+                  Container(
+                    padding: EdgeInsets.all(20),
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      children: [
+                        // Username
+                        TextField(
+                          controller: usernameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Username',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Password
+                        TextField(
+                          controller: passwordController,
+                          obscureText: !showPassword,
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                showPassword
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                              onPressed: () =>
+                                  setState(() => showPassword = !showPassword),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Confirm Password
+                        TextField(
+                          controller: confirmPasswordController,
+                          obscureText: !showConfirm,
+                          decoration: InputDecoration(
+                            labelText: 'Confirm Password',
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                showConfirm
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                              onPressed: () =>
+                                  setState(() => showConfirm = !showConfirm),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+
+                        // Create Account button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _submit,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              backgroundColor: Colors.blue,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              'Create Account',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

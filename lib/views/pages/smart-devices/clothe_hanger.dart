@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:smart_horizon_home/views/pages/smart-devices/schedule_pages/schedule.dart';
 
 class ClotheHanger extends StatefulWidget {
   const ClotheHanger({super.key});
@@ -10,6 +11,7 @@ class ClotheHanger extends StatefulWidget {
 class _ClotheHangerState extends State<ClotheHanger> {
   // State variable
   bool isUnlocked = false;
+  String devicename = "Clothe Hanger";
 
   void toggleUnlock() {
     setState(() {
@@ -108,7 +110,13 @@ class _ClotheHangerState extends State<ClotheHanger> {
               // Add Schedule Button
               ElevatedButton.icon(
                 onPressed: () {
-                  // TODO: implement navigation to schedule page
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          SchedulePage(deviceName: devicename),
+                    ),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey.shade700,
