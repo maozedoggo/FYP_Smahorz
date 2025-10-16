@@ -185,147 +185,141 @@ class CreateAccountState extends State<CreateAccount> {
         ),
         child: SafeArea(
           bottom: false,
-          child: SingleChildScrollView(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 20),
+          child: Container(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 20),
 
-                  // Title
-                  const Text(
-                    "CREATE ACCOUNT",
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                // Title
+                const Text(
+                  "CREATE ACCOUNT",
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                  const SizedBox(height: 30),
+                ),
+                const SizedBox(height: 30),
 
-                  // User info summary
-                  Container(
-                    padding: EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20)
-                    ),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("Name: ${widget.name}"),
-                          Text("Phone: ${widget.phone}"),
-                          Text("Email: ${widget.email}"),
-                          Text("Address Line 1: ${widget.addressLine1}"),
-                          Text("Address Line 2: ${widget.addressLine2}"),
-                          Text("Postal Code: ${widget.postalCode}"),
-                          Text("State: ${widget.state}"),
-                          Text("District: ${widget.district}"),
-                          Text("Country: ${widget.country}"),
-                          Text(
-                            "Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}",
-                          ),
-                        ],
-                      ),
-                    ),
+                // User info summary
+                Container(
+                  padding: EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  const SizedBox(height: 30),
-
-                  Container(
-                    padding: EdgeInsets.all(20),
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Username
-                        TextField(
-                          controller: usernameController,
-                          decoration: const InputDecoration(
-                            prefixIconColor: Colors.black54,
-                            prefixIcon: Icon(Icons.person),
-                            hintText: "USERNAME",
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Password
-                        TextField(
-                          controller: passwordController,
-                          obscureText: !showPassword,
-                          decoration: InputDecoration(
-                            prefixIconColor: Colors.black54,
-                            prefixIcon: Icon(Icons.key),
-                            hintText: "PASSWORD",
-                            border: const OutlineInputBorder(),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                showPassword
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                              ),
-                              onPressed: () =>
-                                  setState(() => showPassword = !showPassword),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Confirm Password
-                        TextField(
-                          controller: confirmPasswordController,
-                          obscureText: !showConfirm,
-                          decoration: InputDecoration(
-                            prefixIconColor: Colors.black54,
-                            prefixIcon: Icon(Icons.key),
-                            hintText: "CONFIRM PASSWORD",
-                            border: const OutlineInputBorder(),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                showConfirm
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                              ),
-                              onPressed: () =>
-                                  setState(() => showConfirm = !showConfirm),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 30),
-
-                        // Create Account button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _submit,
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: Colors.blue,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: const Text(
-                              'Create Account',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
+                        Text("Name: ${widget.name}"),
+                        Text("Phone: ${widget.phone}"),
+                        Text("Email: ${widget.email}"),
+                        Text("Address Line 1: ${widget.addressLine1}"),
+                        Text("Address Line 2: ${widget.addressLine2}"),
+                        Text("Postal Code: ${widget.postalCode}"),
+                        Text("State: ${widget.state}"),
+                        Text("District: ${widget.district}"),
+                        Text("Country: ${widget.country}"),
+                        Text(
+                          "Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}",
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 30),
+
+                Container(
+                  padding: EdgeInsets.all(20),
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
+                    children: [
+                      // Username
+                      TextField(
+                        controller: usernameController,
+                        decoration: const InputDecoration(
+                          prefixIconColor: Colors.black54,
+                          prefixIcon: Icon(Icons.person),
+                          hintText: "USERNAME",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Password
+                      TextField(
+                        controller: passwordController,
+                        obscureText: !showPassword,
+                        decoration: InputDecoration(
+                          prefixIconColor: Colors.black54,
+                          prefixIcon: Icon(Icons.key),
+                          hintText: "PASSWORD",
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              showPassword
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                            ),
+                            onPressed: () =>
+                                setState(() => showPassword = !showPassword),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Confirm Password
+                      TextField(
+                        controller: confirmPasswordController,
+                        obscureText: !showConfirm,
+                        decoration: InputDecoration(
+                          prefixIconColor: Colors.black54,
+                          prefixIcon: Icon(Icons.key),
+                          hintText: "CONFIRM PASSWORD",
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              showConfirm
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                            ),
+                            onPressed: () =>
+                                setState(() => showConfirm = !showConfirm),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+
+                      // Create Account button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _submit,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: Colors.blue,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text(
+                            'Create Account',
+                            style: TextStyle(fontSize: 16, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
