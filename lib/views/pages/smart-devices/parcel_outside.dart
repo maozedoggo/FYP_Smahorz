@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:smart_horizon_home/views/pages/smart-devices/schedule_pages/schedule.dart';
 
 class ParcelFront extends StatefulWidget {
   const ParcelFront({super.key});
@@ -10,6 +11,7 @@ class ParcelFront extends StatefulWidget {
 class _ParcelFrontState extends State<ParcelFront> {
   // State variable
   bool isUnlocked = false;
+  String devicename = "Parcel Outside";
 
   void toggleUnlock() {
     setState(() {
@@ -116,7 +118,13 @@ class _ParcelFrontState extends State<ParcelFront> {
               // Add Schedule Button
               ElevatedButton.icon(
                 onPressed: () {
-                  // TODO: implement navigation to schedule page
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          SchedulePage(deviceName: devicename),
+                    ),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color.fromARGB(255, 255, 255, 255),
@@ -124,10 +132,16 @@ class _ParcelFrontState extends State<ParcelFront> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                icon: const Icon(Icons.calendar_month, color: Color.fromARGB(255, 0, 0, 0)),
+                icon: const Icon(
+                  Icons.calendar_month,
+                  color: Color.fromARGB(255, 0, 0, 0),
+                ),
                 label: const Text(
                   "Add Schedule",
-                  style: TextStyle(color: Color.fromARGB(255, 0, 0, 0), fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Color.fromARGB(255, 0, 0, 0),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],

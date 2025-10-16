@@ -369,7 +369,7 @@ class _SignUpPageState extends State<SignUpPage> {
           addressLine2: addressLine2Controller.text,
           postalCode: postalCodeController.text,
           state: selectedState!,
-          district: selectedDistrict!, // ✅ FIXED: force non-null
+          district: selectedDistrict!,
           country: selectedCountry!,
           dob: selectedDOB!,
         ),

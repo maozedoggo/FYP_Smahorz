@@ -300,7 +300,7 @@ class _LoginPageState extends State<LoginPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Text(
-                              "Don’t have an account? ",
+                              "Don't have an account? ",
                               style: TextStyle(color: Colors.black54),
                             ),
                             TextButton(
