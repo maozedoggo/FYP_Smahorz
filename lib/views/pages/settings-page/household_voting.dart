@@ -1,0 +1,363 @@
+// household_voting.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+/// Minimal dark-mode voting manager for choosing a household admin.
+/// Copy this file into your project and use `HouseholdVotingManager()` in SettingsPage.
+class HouseholdVotingManager extends StatefulWidget {
+  const HouseholdVotingManager({Key? key}) : super(key: key);
+
+  @override
+  State<HouseholdVotingManager> createState() => _HouseholdVotingManagerState();
+}
+
+class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
+  final _fire = FirebaseFirestore.instance;
+  final _auth = FirebaseAuth.instance;
+
+  bool _loading = true;
+  String? _currentUid;
+  String? _householdId;
+  DocumentReference<Map<String, dynamic>>? _householdRef;
+  List<String> _members = [];
+  String? _adminId;
+  Map<String, String> _votes = {}; // voterUid -> candidateUid
+  String? _selectedCandidateUid; // chosen candidate for current user
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAndListen();
+  }
+
+  Future<void> _initAndListen() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      setState(() {
+        _loading = false;
+      });
+      return;
+    }
+
+    _currentUid = user.uid;
+
+    // Get user's household id and listen to household changes (so UI updates)
+    final userDoc = await _fire.collection('users').doc(_currentUid).get();
+    final data = userDoc.data();
+    final hid = (data != null) ? (data['householdId'] as String?) : null;
+
+    if (hid == null || hid.isEmpty) {
+      setState(() {
+        _householdId = null;
+        _householdRef = null;
+        _members = [];
+        _adminId = null;
+        _votes = {};
+        _loading = false;
+      });
+      return;
+    }
+
+    _householdId = hid;
+    _householdRef = _fire.collection('households').doc(_householdId);
+
+    // subscribe to household doc changes
+    _householdRef!.snapshots().listen((snap) {
+      final d = snap.data();
+      if (d == null) {
+        setState(() {
+          _members = [];
+          _adminId = null;
+          _votes = {};
+          _loading = false;
+        });
+        return;
+      }
+      final gotMembers = List<String>.from(d['members'] ?? <String>[]);
+      final gotAdmin = d['adminId'] as String?;
+      final rawVotes = Map<String, dynamic>.from(d['votes'] ?? <String, dynamic>{});
+      final Map<String, String> normalizedVotes = {};
+      rawVotes.forEach((k, v) {
+        if (v is String && k is String) normalizedVotes[k] = v;
+      });
+
+      // update selected candidate if current user has already voted
+      setState(() {
+        _members = gotMembers;
+        _adminId = gotAdmin;
+        _votes = normalizedVotes;
+        _selectedCandidateUid = _votes[_currentUid];
+        _loading = false;
+      });
+    }, onError: (e) {
+      // on error, still show UI
+      setState(() => _loading = false);
+    });
+  }
+
+  bool get _isMember => _householdId != null && _members.contains(_currentUid);
+  bool get _isAdminUser => _adminId != null && _adminId == _currentUid;
+
+  // cast or change vote (client writes votes.voterUid = candidateUid)
+  Future<void> _submitVote() async {
+    if (!_isMember || _selectedCandidateUid == null || _currentUid == null || _householdRef == null) return;
+
+    setState(() => _submitting = true);
+    try {
+      // set voter's vote to chosen candidate (merge)
+      await _householdRef!.set({
+        'votes': { _currentUid!: _selectedCandidateUid }
+      }, SetOptions(merge: true));
+
+      // after writing, check for majority and auto-promote if reached
+      await _maybePromoteIfMajority();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Vote submitted.")));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error voting: $e")));
+    } finally {
+      setState(() => _submitting = false);
+    }
+  }
+
+  // Admin or any client can call this to tally and promote winner if majority exists.
+  Future<void> _maybePromoteIfMajority() async {
+    if (_householdRef == null) return;
+    final snap = await _householdRef!.get();
+    final data = snap.data();
+    if (data == null) return;
+
+    final members = List<String>.from(data['members'] ?? []);
+    final votesRaw = Map<String, dynamic>.from(data['votes'] ?? {});
+    final Map<String, int> counts = {};
+    for (final v in votesRaw.values) {
+      if (v is String) counts[v] = (counts[v] ?? 0) + 1;
+    }
+    if (members.isEmpty) return;
+    final majority = (members.length / 2).floor() + 1; // > half
+
+    // find candidate with max votes
+    String? topUid;
+    int topCount = 0;
+    counts.forEach((candidateUid, cnt) {
+      if (cnt > topCount) {
+        topCount = cnt;
+        topUid = candidateUid;
+      }
+    });
+
+    if (topUid != null && topCount >= majority) {
+      // Promote topUid to admin (transactionally)
+      await _fire.runTransaction((tx) async {
+        final hSnap = await tx.get(_householdRef!);
+        final hData = hSnap.data();
+        if (hData == null) return;
+        final currentMembers = List<String>.from(hData['members'] ?? []);
+        // sanity: ensure winner is a member
+        if (!currentMembers.contains(topUid)) return;
+
+        final previousAdmin = hData['adminId'] as String?;
+        // set new adminId and clear votes
+        tx.update(_householdRef!, {
+          'adminId': topUid,
+          'votes': <String, dynamic>{}, // clear votes after promotion
+        });
+
+        // update old admin user doc (demote)
+        if (previousAdmin != null && previousAdmin.isNotEmpty) {
+          tx.update(_fire.collection('users').doc(previousAdmin), {'role': 'member'});
+        }
+        // update new admin user doc
+        tx.update(_fire.collection('users').doc(topUid), {'role': 'admin'});
+
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("New admin promoted by majority vote.")));
+    }
+  }
+
+  // Admin-only: finalize (tally and promote if majority)
+  Future<void> _finalizeVotes() async {
+    setState(() => _submitting = true);
+    try {
+      await _maybePromoteIfMajority();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error finalizing: $e")));
+    } finally {
+      setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _clearVotes() async {
+    if (_householdRef == null) return;
+    setState(() => _submitting = true);
+    try {
+      await _householdRef!.update({'votes': {}}); // clear votes map
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Votes cleared.")));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error clearing votes: $e")));
+    } finally {
+      setState(() => _submitting = false);
+    }
+  }
+
+  // helper: compute counts map for UI
+  Map<String, int> _computeCounts() {
+    final Map<String, int> counts = {};
+    _votes.values.forEach((c) {
+      counts[c] = (counts[c] ?? 0) + 1;
+    });
+    return counts;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeText = TextStyle(color: Colors.white);
+    if (_loading) {
+      return Card(
+        color: const Color(0xFF0B1220),
+        margin: const EdgeInsets.all(16),
+        child: const Padding(
+          padding: EdgeInsets.all(20.0),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
+    if (!_isMember) {
+      return Card(
+        color: const Color(0xFF111827),
+        margin: const EdgeInsets.all(16),
+        child: Padding(
+          padding: const EdgeInsets.all(18.0),
+          child: Column(
+            children: [
+              Text("Household Voting", style: themeText.copyWith(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Text("You are not in a household. Create or join a household to use voting.", style: themeText),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final counts = _computeCounts();
+    final majority = (_members.length / 2).floor() + 1;
+
+    return Card(
+      color: const Color(0xFF111827),
+      margin: const EdgeInsets.all(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text("🏛️ Admin Election", style: themeText.copyWith(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text("Current admin: ${_adminId == null ? '—' : (_adminId == _currentUid ? 'You' : _adminId)}", style: themeText.copyWith(color: Colors.white70)),
+          const SizedBox(height: 12),
+
+          // Candidate list (radio buttons)
+          Text("Cast your vote", style: themeText.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+
+          // show members with radio options; exclude current admin from being a voter candidate? We'll allow voting for any member (except yourself maybe)
+          Column(
+            children: _members.map((uid) {
+              final count = counts[uid] ?? 0;
+              final isSelf = uid == _currentUid;
+              final displayLabel = uid == _currentUid ? "You ($_currentUid)" : uid;
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  future: _fire.collection('users').doc(uid).get(),
+                  builder: (context, snap) {
+                    final d = snap.data?.data();
+                    final label = d != null ? (d['username'] ?? d['email'] ?? uid) : uid;
+                    final subtitle = d != null ? (d['email'] ?? '') : '';
+                    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Expanded(child: Text(label, style: themeText)),
+                        if (uid == _adminId)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(color: Colors.blue.shade700, borderRadius: BorderRadius.circular(6)),
+                            child: const Text("Admin", style: TextStyle(color: Colors.white, fontSize: 12)),
+                          )
+                      ]),
+                      if (subtitle.isNotEmpty) const SizedBox(height: 4),
+                      if (subtitle.isNotEmpty) Text(subtitle, style: themeText.copyWith(color: Colors.white54, fontSize: 12)),
+                    ]);
+                  },
+                ),
+                leading: Radio<String?>(
+                  value: uid,
+                  groupValue: _selectedCandidateUid,
+                  onChanged: (val) {
+                    // allow voting for any member other than current admin (optional)
+                    if (_adminId != null && val == _adminId) {
+                      // user is trying to vote for current admin — allow but useless
+                      setState(() => _selectedCandidateUid = val);
+                    } else {
+                      setState(() => _selectedCandidateUid = val);
+                    }
+                  },
+                ),
+                trailing: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text("${count}", style: themeText.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text("votes", style: themeText.copyWith(color: Colors.white54, fontSize: 12)),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+              child: ElevatedButton(
+                onPressed: _submitting || _selectedCandidateUid == null ? null : _submitVote,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade600),
+                child: _submitting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text("Vote / Change Vote"),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: _maybePromoteIfMajority,
+              child: const Text("Tally"),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade800),
+            ),
+          ]),
+
+          const SizedBox(height: 12),
+          Text("Majority needed: $majority vote(s)", style: themeText.copyWith(color: Colors.white70)),
+          const SizedBox(height: 8),
+
+          if (_isAdminUser) ...[
+            const Divider(color: Colors.grey),
+            Row(children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.check),
+                  label: const Text("Finalize (promote if majority)"),
+                  onPressed: _submitting ? null : _finalizeVotes,
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.clear),
+                label: const Text("Clear Votes"),
+                onPressed: _submitting ? null : _clearVotes,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+              ),
+            ]),
+          ],
+
+        ]),
+      ),
+    );
+  }
+}
