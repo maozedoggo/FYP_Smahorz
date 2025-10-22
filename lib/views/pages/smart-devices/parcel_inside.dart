@@ -68,17 +68,25 @@ class _ParcelBackState extends State<ParcelBack> {
                   horizontal: 30,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade700,
+                  color: const Color.fromARGB(255, 255, 255, 255),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: const [
-                    Icon(Icons.meeting_room, color: Colors.orange, size: 40),
+                    Icon(
+                      Icons.door_back_door,
+                      color: Color.fromARGB(255, 0, 0, 0),
+                      size: 40,
+                    ),
                     SizedBox(width: 10),
                     Text(
                       "Outside Door",
-                      style: TextStyle(color: Colors.white, fontSize: 18),
+                      style: TextStyle(
+                        color: Color.fromARGB(255, 0, 0, 0),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -113,20 +121,27 @@ class _ParcelBackState extends State<ParcelBack> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => SchedulePage(deviceName: deviceName),
+                      builder: (context) =>
+                          SchedulePage(deviceName: deviceName),
                     ),
                   );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey.shade700,
+                  backgroundColor: const Color.fromARGB(255, 255, 255, 255),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                icon: const Icon(Icons.calendar_month, color: Colors.amber),
+                icon: const Icon(
+                  Icons.calendar_month,
+                  color: Color.fromARGB(255, 0, 0, 0),
+                ),
                 label: const Text(
                   "Add Schedule",
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(
+                    color: Color.fromARGB(255, 0, 0, 0),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
