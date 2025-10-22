@@ -21,7 +21,7 @@ class _SchedulePageState extends State<SchedulePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0B1220),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -33,7 +33,7 @@ class _SchedulePageState extends State<SchedulePage> {
                 alignment: Alignment.topLeft,
                 child: IconButton(
                   icon: const Icon(Icons.arrow_back_ios_new),
-                  color: Colors.black,
+                  color: Colors.white,
                   onPressed: () {
                     Navigator.pop(context);
                   },
@@ -47,7 +47,7 @@ class _SchedulePageState extends State<SchedulePage> {
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: Colors.white,
                 ),
               ),
             ),
@@ -100,7 +100,7 @@ class _SchedulePageState extends State<SchedulePage> {
                   shape: BoxShape.circle,
                 ),
                 weekendTextStyle: TextStyle(color: Colors.red),
-                defaultTextStyle: TextStyle(color: Colors.black),
+                defaultTextStyle: TextStyle(color: Colors.white),
                 disabledTextStyle: TextStyle(
                   color: Colors.grey,
                 ),
