@@ -12,6 +12,7 @@ class NotificationPage extends StatelessWidget {
     String householdId,
     String userUid,
     String inviterUid,
+    String householdName,
   ) async {
     final notificationRef =
         FirebaseFirestore.instance.collection('notifications').doc(notificationId);
@@ -43,9 +44,9 @@ class NotificationPage extends StatelessWidget {
         'toUid': inviterUid,
         'fromUid': userUid,
         'householdId': householdId,
+        'householdName': householdName,
         'type': 'household_response',
         'status': 'accepted',
-        // keep consistent time field name(s)
         'sentAt': FieldValue.serverTimestamp(),
       });
     } else if (status == 'rejected') {
@@ -53,6 +54,7 @@ class NotificationPage extends StatelessWidget {
         'toUid': inviterUid,
         'fromUid': userUid,
         'householdId': householdId,
+        'householdName': householdName,
         'type': 'household_response',
         'status': 'rejected',
         'sentAt': FieldValue.serverTimestamp(),
@@ -86,29 +88,68 @@ class NotificationPage extends StatelessWidget {
     if (data['sentAt'] is Timestamp) return (data['sentAt'] as Timestamp).toDate();
     if (data['timestamp'] is Timestamp) return (data['timestamp'] as Timestamp).toDate();
     if (data['createdAt'] is Timestamp) return (data['createdAt'] as Timestamp).toDate();
-    // Firestore DocumentSnapshot has .metadata but not server timestamp; use doc.metadata or serverTimestamp isn't available here.
-    // Use server-side document createTime if available (DocumentSnapshot has .metadata.isFromCache, but not createTime in web plugin).
-    // As fallback return null.
     return null;
+  }
+
+  // Card widget to match settings page style
+  Widget _notificationCard({required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827), // Matches settings page card color
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade800),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  // Determine notification type based on available fields
+  String _determineNotificationType(Map<String, dynamic> data) {
+    final type = data['type'] as String?;
+    if (type != null && type.isNotEmpty) {
+      return type;
+    }
+    
+    // Auto-detect type based on field presence
+    final householdId = data['householdId'] as String?;
+    final status = data['status'] as String?;
+    
+    if (householdId != null && householdId.isNotEmpty && status == 'pending') {
+      return 'household_invite';
+    }
+    
+    return 'unknown';
   }
 
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
+    
+    // Debug: Print current user UID to verify
+    print("Current user UID: $uid");
+    
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF0B1220),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor: const Color(0xFF07101A),
+        centerTitle: true,
         title: const Text("Notifications", style: TextStyle(color: Colors.white)),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // only filter by toUid — we'll sort locally by sentAt/timestamp if present
         stream: FirebaseFirestore.instance
             .collection('notifications')
             .where('toUid', isEqualTo: uid)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
+            print("Stream error: ${snapshot.error}");
             return Center(
               child: Text(
                 "Error: ${snapshot.error}",
@@ -118,12 +159,26 @@ class NotificationPage extends StatelessWidget {
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Colors.white));
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            );
           }
 
           final docs = snapshot.data?.docs ?? [];
+          print("Found ${docs.length} notifications for user $uid");
+          
+          // Debug: Print all notification documents
+          for (final doc in docs) {
+            print("Notification doc: ${doc.id} - ${doc.data()}");
+          }
+
           if (docs.isEmpty) {
-            return const Center(child: Text("No notifications yet.", style: TextStyle(color: Colors.white70)));
+            return const Center(
+              child: Text(
+                "No notifications yet.", 
+                style: TextStyle(color: Colors.white70)
+              ),
+            );
           }
 
           // Convert docs to list of maps + keep original doc for id
@@ -146,21 +201,20 @@ class NotificationPage extends StatelessWidget {
           });
 
           return ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             itemCount: list.length,
             itemBuilder: (context, index) {
               final item = list[index];
               final id = item['_id'] as String;
               final data = Map<String, dynamic>.from(item);
-              final typeRaw = data['type'] as String? ?? '';
+              
+              print("Building notification: $data");
+              
+              final type = _determineNotificationType(data);
               final status = (data['status'] as String?) ?? 'pending';
               final fromUid = (data['fromUid'] as String?) ?? '';
               final householdId = (data['householdId'] as String?) ?? '';
-              String type = typeRaw;
-
-              // Auto-detect invite if type missing but householdId exists and status pending
-              if (type.isEmpty && householdId.isNotEmpty && status == 'pending') {
-                type = 'household_invite';
-              }
+              final householdName = (data['householdName'] as String?) ?? '';
 
               return FutureBuilder<String>(
                 future: _getUserDisplayName(fromUid),
@@ -172,7 +226,7 @@ class NotificationPage extends StatelessWidget {
                   switch (type) {
                     case 'household_invite':
                       title = "Household Invitation";
-                      subtitle = "Invite from $inviter";
+                      subtitle = "Invite from $inviter to join $householdName";
                       break;
                     case 'household_response':
                       title = "Invite Response";
@@ -188,7 +242,7 @@ class NotificationPage extends StatelessWidget {
                       break;
                     default:
                       title = "Notification";
-                      subtitle = data['message']?.toString() ?? "You have a notification.";
+                      subtitle = data['message']?.toString() ?? "You have a new notification.";
                   }
 
                   return Dismissible(
@@ -208,34 +262,69 @@ class NotificationPage extends StatelessWidget {
                     confirmDismiss: (dir) async {
                       if (dir == DismissDirection.startToEnd) {
                         await _markAsRead(id);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Marked as read"), backgroundColor: Colors.green));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Marked as read"), 
+                            backgroundColor: Colors.green
+                          ),
+                        );
                         return false;
                       } else {
                         await _deleteNotification(id);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Deleted"), backgroundColor: Colors.redAccent));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Deleted"), 
+                            backgroundColor: Colors.redAccent
+                          ),
+                        );
                         return true;
                       }
                     },
-                    child: Card(
-                      color: const Color(0xFF1E1E1E),
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: ListTile(
-                        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        subtitle: Text(subtitle, style: const TextStyle(color: Colors.white70)),
-                        trailing: (type == 'household_invite' && status == 'pending')
-                            ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  TextButton(
-                                      onPressed: () => respondToInvite(id, 'accepted', householdId, uid, fromUid),
-                                      child: const Text("Accept", style: TextStyle(color: Colors.greenAccent))),
-                                  TextButton(
-                                      onPressed: () => respondToInvite(id, 'rejected', householdId, uid, fromUid),
-                                      child: const Text("Reject", style: TextStyle(color: Colors.redAccent))),
-                                ],
-                              )
-                            : null,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: _notificationCard(
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          title: Text(
+                            title, 
+                            style: const TextStyle(
+                              color: Colors.white, 
+                              fontWeight: FontWeight.bold
+                            ),
+                          ),
+                          subtitle: Text(
+                            subtitle, 
+                            style: const TextStyle(color: Colors.white70)
+                          ),
+                          trailing: (type == 'household_invite' && status == 'pending')
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () => respondToInvite(
+                                        id, 'accepted', householdId, uid, fromUid, householdName
+                                      ),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.greenAccent,
+                                      ),
+                                      child: const Text("Accept"),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => respondToInvite(
+                                        id, 'rejected', householdId, uid, fromUid, householdName
+                                      ),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.redAccent,
+                                      ),
+                                      child: const Text("Reject"),
+                                    ),
+                                  ],
+                                )
+                              : null,
+                        ),
                       ),
                     ),
                   );

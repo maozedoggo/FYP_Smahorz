@@ -290,12 +290,13 @@ class _SettingsPageState extends State<SettingsPage> {
           .limit(1)
           .get();
       if (query.docs.isEmpty) {
-        // If user doesn't exist, still create an invite doc (optional) — we'll create invite pointing to email
-        await _fire.collection('invites').add({
+        // If user doesn't exist, create notification with email reference
+        await _fire.collection('notifications').add({
           'fromUid': currentUid,
           'toEmail': email,
           'householdId': householdId,
           'householdName': householdName,
+          'type': 'household_invite',
           'status': 'pending',
           'sentAt': FieldValue.serverTimestamp(),
         });
@@ -312,9 +313,9 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
 
-      // check existing invite
+      // check existing notification
       final existing = await _fire
-          .collection('invites')
+          .collection('notifications')
           .where('toUid', isEqualTo: toUid)
           .where('householdId', isEqualTo: householdId)
           .where('status', isEqualTo: 'pending')
@@ -325,11 +326,12 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
 
-      await _fire.collection('invites').add({
+      await _fire.collection('notifications').add({
         'fromUid': currentUid,
         'toUid': toUid,
         'householdId': householdId,
         'householdName': householdName,
+        'type': 'household_invite',
         'status': 'pending',
         'sentAt': FieldValue.serverTimestamp(),
       });
@@ -1074,12 +1076,10 @@ class _SettingsPageState extends State<SettingsPage> {
       backgroundColor: const Color(0xFF0B1220), // page bg
       appBar: AppBar(
         backgroundColor: const Color(0xFF07101A),
-        title: const Center(
-          child: Text(
-            "Household Settings",
-            style: TextStyle(color: Colors.white),
-            textAlign: TextAlign.center,
-          ),
+        centerTitle: true,
+        title: const Text(
+          "Household Settings",
+          style: TextStyle(color: Colors.white),
         ),
       ),
       body: SafeArea(
