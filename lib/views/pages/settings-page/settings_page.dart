@@ -75,38 +75,27 @@ class _SettingsPageState extends State<SettingsPage> {
       householdId = userData['householdId'];
       userRole = userData['role'];
 
+      // LOAD USER ADDRESS REGARDLESS OF HOUSEHOLD STATUS
+      String userAddress = _loadUserAddress(userData);
+
       if (householdId != null) {
         householdDocRef = _fire.collection('households').doc(householdId);
         final hSnap = await householdDocRef!.get();
         if (hSnap.exists) {
           final hData = hSnap.data()!;
 
-          // IMPROVED ADDRESS FETCHING LOGIC
+          // LOAD ADDRESS FROM MULTIPLE SOURCES
           String address = "";
 
-          // Check if address exists as a single string
-          if (hData['address'] != null &&
-              hData['address'].toString().isNotEmpty) {
-            address = hData['address'].toString();
-          }
-          // If no single address field, check for structured address fields
-          else if (hData['addressLine1'] != null || hData['street'] != null) {
-            // Support multiple field naming conventions
-            final addressLine1 = hData['addressLine1'] ?? hData['street'] ?? '';
-            final addressLine2 =
-                hData['addressLine2'] ?? hData['apartment'] ?? '';
-            final city = hData['city'] ?? hData['district'] ?? '';
-            final state = hData['state'] ?? hData['province'] ?? '';
-            final postalCode = hData['postalCode'] ?? hData['zipCode'] ?? '';
-            final country = hData['country'] ?? '';
+          // First, try to get address from household document (where we save it)
+          final householdAddress = hData['address']?.toString() ?? '';
 
-            // Build address string from non-empty fields
-            final addressParts =
-                [addressLine1, addressLine2, city, state, postalCode, country]
-                    .where((part) => part != null && part.toString().isNotEmpty)
-                    .toList();
-
-            address = addressParts.join(", ");
+          // If household has address, use it
+          if (householdAddress.isNotEmpty) {
+            address = householdAddress;
+          } else {
+            // Otherwise, use the user address we loaded earlier
+            address = userAddress;
           }
 
           setState(() {
@@ -117,6 +106,12 @@ class _SettingsPageState extends State<SettingsPage> {
             memberUids = List<String>.from(hData['members'] ?? []);
             adminUids = List<String>.from(hData['admins'] ?? []);
           });
+          
+          debugPrint("=== ADDRESS DEBUG ===");
+          debugPrint("Household Name: $householdName");
+          debugPrint("Final Address: $householdAddressText");
+          debugPrint("Address Controller Text: ${_addressCtrl.text}");
+          debugPrint("=== END DEBUG ===");
         } else {
           // household doc missing — clear user
           await currentUserDocRef!.set({
@@ -129,20 +124,20 @@ class _SettingsPageState extends State<SettingsPage> {
             householdName = null;
             memberUids = [];
             adminUids = [];
-            householdAddressText = "";
+            householdAddressText = userAddress; // Keep user address
             _nameCtrl.clear();
-            _addressCtrl.clear();
+            _addressCtrl.text = userAddress; // Keep user address in controller
           });
         }
       } else {
-        // not in any household
+        // not in any household - STILL SHOW USER ADDRESS
         setState(() {
           householdName = null;
           memberUids = [];
           adminUids = [];
-          householdAddressText = "";
+          householdAddressText = userAddress;
           _nameCtrl.clear();
-          _addressCtrl.clear();
+          _addressCtrl.text = userAddress; // Show user address even without household
         });
       }
     } catch (e) {
@@ -153,6 +148,23 @@ class _SettingsPageState extends State<SettingsPage> {
     } finally {
       setState(() => isLoading = false);
     }
+  }
+
+  // Load user address from user document
+  String _loadUserAddress(Map<String, dynamic> userData) {
+    final addressLine1 = userData['addressLine1']?.toString() ?? '';
+    final addressLine2 = userData['addressLine2']?.toString() ?? '';
+    final district = userData['district']?.toString() ?? '';
+    final state = userData['state']?.toString() ?? '';
+    final postalCode = userData['postalCode']?.toString() ?? '';
+    final country = userData['country']?.toString() ?? '';
+
+    // Build address string from non-empty fields
+    final addressParts = [addressLine1, addressLine2, district, state, postalCode, country]
+        .where((part) => part.isNotEmpty)
+        .toList();
+
+    return addressParts.join(", ");
   }
 
   // ---------- Household creation ----------
@@ -244,13 +256,10 @@ class _SettingsPageState extends State<SettingsPage> {
       final newName = _nameCtrl.text.trim();
       final newAddress = _addressCtrl.text.trim();
 
+      // Save both name and address to household document
       await householdDocRef!.set({
         'name': newName,
-        'address': newAddress, // Save as single address field
-        // You can also save as structured fields if needed:
-        // 'addressLine1': _extractAddressPart(newAddress, 0),
-        // 'city': _extractAddressPart(newAddress, 1),
-        // etc.
+        'address': newAddress,
       }, SetOptions(merge: true));
 
       await _loadData();
@@ -588,12 +597,6 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  // Helper to extract address parts if using structured fields
-  String _extractAddressPart(String fullAddress, int index) {
-    final parts = fullAddress.split(',');
-    return index < parts.length ? parts[index].trim() : '';
-  }
-
   // ---------- UI building ----------
   bool get _isAdmin => userRole == 'owner' || userRole == 'admin';
 
@@ -634,7 +637,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _householdInfoCard() {
-    final canEdit = _isAdmin;
+    final canEdit = _isAdmin && householdId != null; // Only show save button if in household
     final saveDisabled =
         isSavingHousehold ||
         (_nameCtrl.text.trim() == (householdName ?? "").trim() &&
@@ -715,6 +718,20 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
               ],
+            )
+          else if (householdId == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6.0),
+              child: Row(
+                children: [
+                  const Icon(Icons.info, color: Colors.blueAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Create a household to edit information.",
+                    style: TextStyle(color: Colors.blue.shade100),
+                  ),
+                ],
+              ),
             )
           else
             Padding(
@@ -873,6 +890,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _membersCard() {
+    if (householdId == null) return const SizedBox(); // Don't show members card if no household
+
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -946,6 +965,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _adminControlCard() {
+    if (householdId == null) return const SizedBox(); // Don't show admin card if no household
+
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1111,19 +1132,25 @@ class _SettingsPageState extends State<SettingsPage> {
 
                       // CONDITIONAL RENDERING - FIXED VERSION
                       if (householdId == null)
-                        Center(
-                          child: ElevatedButton.icon(
-                            onPressed: _createHouseholdDialog,
-                            icon: const Icon(Icons.add_home_work),
-                            label: const Text("Create Household"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue.shade600,
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 16,
-                                horizontal: 24,
+                        Column(
+                          children: [
+                            _householdInfoCard(),
+                            const SizedBox(height: 20),
+                            Center(
+                              child: ElevatedButton.icon(
+                                onPressed: _createHouseholdDialog,
+                                icon: const Icon(Icons.add_home_work),
+                                label: const Text("Create Household"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue.shade600,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                    horizontal: 24,
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         )
                       else
                         Column(

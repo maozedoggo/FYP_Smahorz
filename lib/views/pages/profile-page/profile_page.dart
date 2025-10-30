@@ -26,9 +26,10 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadUserProfile() async {
-    String? email = FirebaseAuth.instance.currentUser?.email;
-    if (email == null) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
+    final email = user.email!;
     try {
       DocumentSnapshot doc =
           await FirebaseFirestore.instance.collection('users').doc(email).get();
@@ -41,7 +42,6 @@ class _ProfilePageState extends State<ProfilePage> {
           _loading = false;
         });
       } else {
-        // If no user document, create a new one
         await FirebaseFirestore.instance.collection('users').doc(email).set({
           "email": email,
           "name": "",
@@ -67,23 +67,32 @@ class _ProfilePageState extends State<ProfilePage> {
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
     if (pickedFile == null) return;
 
-    File file = File(pickedFile.path);
-    String? email = FirebaseAuth.instance.currentUser?.email;
-    if (email == null) return;
+    final file = File(pickedFile.path);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
     try {
-      final ref =
-          FirebaseStorage.instance.ref().child('profilePictures/$email.jpg');
-      await ref.putFile(file);
-      String downloadUrl = await ref.getDownloadURL();
+      final uid = user.uid;
 
-      await FirebaseFirestore.instance.collection('users').doc(email).update({
-        'photoUrl': downloadUrl,
-      });
+      final ref =
+          FirebaseStorage.instance.ref().child('profilePictures/$uid/profile.jpg');
+
+      await ref.putFile(file);
+
+      final downloadUrl = await ref.getDownloadURL();
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.email)
+          .update({'photoUrl': downloadUrl});
 
       setState(() {
         _photoUrl = downloadUrl;
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Profile picture updated!")),
+      );
     } catch (e) {
       debugPrint("Error uploading image: $e");
       ScaffoldMessenger.of(context).showSnackBar(
@@ -109,40 +118,47 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6),
+      backgroundColor: const Color(0xFF0B1220), // dark background
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF3F4F6),
-        elevation: 0,
+        backgroundColor: const Color(0xFF07101A),
+        elevation: 2,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87, size: 28),
+          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
           onPressed: () => Navigator.pop(context),
         ),
+        title: const Text(
+          "Profile",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+        centerTitle: true,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: Colors.white70),
+            )
           : SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Profile Card
+                    // Profile Card (dark mode)
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF3F4F6),
-                        borderRadius: BorderRadius.circular(30),
+                        color: const Color(0xFF111827),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.grey.shade800),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withOpacity(0.4),
                             blurRadius: 10,
-                            offset: const Offset(0, 4),
+                            offset: const Offset(0, 6),
                           ),
                         ],
                       ),
                       child: Row(
                         children: [
-                          // Profile picture
                           GestureDetector(
                             onTap: _pickAndUploadImage,
                             child: CircleAvatar(
@@ -150,19 +166,17 @@ class _ProfilePageState extends State<ProfilePage> {
                               backgroundImage: _photoUrl != null
                                   ? NetworkImage(_photoUrl!)
                                   : null,
-                              backgroundColor: Colors.grey[300],
+                              backgroundColor: Colors.grey.shade700,
                               child: _photoUrl == null
                                   ? const Icon(
                                       Icons.person,
                                       size: 40,
-                                      color: Colors.white,
+                                      color: Colors.white70,
                                     )
                                   : null,
                             ),
                           ),
                           const SizedBox(width: 16),
-
-                          // Name + Edit Button
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -172,23 +186,22 @@ class _ProfilePageState extends State<ProfilePage> {
                                   style: const TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
+                                    color: Colors.white,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
                                 ElevatedButton(
                                   onPressed: _navigateToEditProfile,
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue[500],
+                                    backgroundColor: const Color(0xFF2563EB),
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
+                                      horizontal: 18,
                                       vertical: 10,
                                     ),
-                                    elevation: 3,
                                   ),
                                   child: const Text(
                                     "EDIT",
@@ -215,44 +228,45 @@ class _ProfilePageState extends State<ProfilePage> {
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          color: Colors.white,
                         ),
                       ),
                     ),
 
                     const SizedBox(height: 16),
 
-                    // Activity Card
+                    // Activity Card (dark style)
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF3F4F6),
-                        borderRadius: BorderRadius.circular(30),
+                        color: const Color(0xFF111827),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.grey.shade800),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withOpacity(0.4),
                             blurRadius: 10,
-                            offset: const Offset(0, 4),
+                            offset: const Offset(0, 6),
                           ),
                         ],
                       ),
-                      child: Column(
-                        children: const [
+                      child: const Column(
+                        children: [
                           ActivityItem(
-                            time: "7:45pm",
-                            action: "Turn on room lights",
+                            time: "7:45 PM",
+                            action: "Turned on room lights",
                           ),
                           ActivityItem(
-                            time: "8:30pm",
-                            action: "Open parcel box",
+                            time: "8:30 PM",
+                            action: "Opened parcel box",
                           ),
                           ActivityItem(
-                            time: "8:45pm",
-                            action: "Retract clothe hanger",
+                            time: "8:45 PM",
+                            action: "Retracted clothes hanger",
                           ),
                           ActivityItem(
-                            time: "9:00pm",
-                            action: "Turn off room lights",
+                            time: "9:00 PM",
+                            action: "Turned off room lights",
                           ),
                         ],
                       ),
@@ -284,14 +298,17 @@ class ActivityItem extends StatelessWidget {
               time,
               style: const TextStyle(
                 fontWeight: FontWeight.w500,
-                color: Colors.grey,
+                color: Colors.white54,
               ),
             ),
           ),
           Expanded(
             child: Text(
               action,
-              style: const TextStyle(color: Colors.black87, fontSize: 16),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+              ),
             ),
           ),
         ],

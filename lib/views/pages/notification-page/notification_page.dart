@@ -260,26 +260,30 @@ class NotificationPage extends StatelessWidget {
                       child: const Icon(Icons.delete, color: Colors.white),
                     ),
                     confirmDismiss: (dir) async {
-                      if (dir == DismissDirection.startToEnd) {
-                        await _markAsRead(id);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Marked as read"), 
-                            backgroundColor: Colors.green
-                          ),
-                        );
-                        return false;
-                      } else {
-                        await _deleteNotification(id);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Deleted"), 
-                            backgroundColor: Colors.redAccent
-                          ),
-                        );
-                        return true;
-                      }
-                    },
+  // Capture the messenger early to avoid using a deactivated context later
+  final messenger = ScaffoldMessenger.of(context);
+
+  if (dir == DismissDirection.startToEnd) {
+    await _markAsRead(id);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text("Marked as read"),
+        backgroundColor: Colors.green,
+      ),
+    );
+    return false; // don’t remove from the list
+  } else {
+    await _deleteNotification(id);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text("Deleted"),
+        backgroundColor: Colors.redAccent,
+      ),
+    );
+    return true; // allow Dismissible to remove it
+  }
+},
+
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       child: _notificationCard(
