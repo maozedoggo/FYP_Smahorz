@@ -106,7 +106,7 @@ class _SettingsPageState extends State<SettingsPage> {
             memberUids = List<String>.from(hData['members'] ?? []);
             adminUids = List<String>.from(hData['admins'] ?? []);
           });
-          
+
           debugPrint("=== ADDRESS DEBUG ===");
           debugPrint("Household Name: $householdName");
           debugPrint("Final Address: $householdAddressText");
@@ -137,7 +137,8 @@ class _SettingsPageState extends State<SettingsPage> {
           adminUids = [];
           householdAddressText = userAddress;
           _nameCtrl.clear();
-          _addressCtrl.text = userAddress; // Show user address even without household
+          _addressCtrl.text =
+              userAddress; // Show user address even without household
         });
       }
     } catch (e) {
@@ -160,9 +161,14 @@ class _SettingsPageState extends State<SettingsPage> {
     final country = userData['country']?.toString() ?? '';
 
     // Build address string from non-empty fields
-    final addressParts = [addressLine1, addressLine2, district, state, postalCode, country]
-        .where((part) => part.isNotEmpty)
-        .toList();
+    final addressParts = [
+      addressLine1,
+      addressLine2,
+      district,
+      state,
+      postalCode,
+      country,
+    ].where((part) => part.isNotEmpty).toList();
 
     return addressParts.join(", ");
   }
@@ -637,7 +643,9 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _householdInfoCard() {
-    final canEdit = _isAdmin && householdId != null; // Only show save button if in household
+    final canEdit =
+        _isAdmin &&
+        householdId != null; // Only show save button if in household
     final saveDisabled =
         isSavingHousehold ||
         (_nameCtrl.text.trim() == (householdName ?? "").trim() &&
@@ -890,7 +898,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _membersCard() {
-    if (householdId == null) return const SizedBox(); // Don't show members card if no household
+    if (householdId == null)
+      return const SizedBox(); // Don't show members card if no household
 
     return _card(
       child: Column(
@@ -965,7 +974,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _adminControlCard() {
-    if (householdId == null) return const SizedBox(); // Don't show admin card if no household
+    if (householdId == null)
+      return const SizedBox(); // Don't show admin card if no household
 
     return _card(
       child: Column(
@@ -1096,11 +1106,15 @@ class _SettingsPageState extends State<SettingsPage> {
     return Scaffold(
       backgroundColor: const Color(0xFF0B1220), // page bg
       appBar: AppBar(
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: Icon(Icons.arrow_back_ios, color: Colors.white),
+        ),
         backgroundColor: const Color(0xFF07101A),
         centerTitle: true,
         title: const Text(
           "Household Settings",
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -1120,7 +1134,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          householdName ?? "Settings",
+                          householdName ?? "",
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 28,
