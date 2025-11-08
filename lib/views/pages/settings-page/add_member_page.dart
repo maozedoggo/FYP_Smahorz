@@ -17,7 +17,7 @@ class _AddMemberPageState extends State<AddMemberPage> {
   final _fire = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
-  String? currentUid;
+  String? currentEmail;
   String? householdId;
   String? userRole;
 
@@ -30,8 +30,9 @@ class _AddMemberPageState extends State<AddMemberPage> {
   Future<void> _initContext() async {
     final user = _auth.currentUser;
     if (user == null) return;
-    currentUid = user.uid;
-    final userSnap = await _fire.collection('users').doc(currentUid).get();
+    currentEmail = user.email;
+    if (currentEmail == null) return;
+    final userSnap = await _fire.collection('users').doc(currentEmail).get();
     final udata = userSnap.data();
     setState(() {
       householdId = udata?['householdId'];
@@ -52,7 +53,9 @@ class _AddMemberPageState extends State<AddMemberPage> {
       }
 
       if (!(userRole == 'owner' || userRole == 'admin')) {
-        setState(() => _errorMessage = "Only household owners or admins can invite.");
+        setState(
+          () => _errorMessage = "Only household owners or admins can invite.",
+        );
         return;
       }
 
@@ -63,7 +66,11 @@ class _AddMemberPageState extends State<AddMemberPage> {
       }
 
       // Search user by username (exact)
-      final query = await _fire.collection('users').where('username', isEqualTo: username).limit(1).get();
+      final query = await _fire
+          .collection('users')
+          .where('username', isEqualTo: username)
+          .limit(1)
+          .get();
 
       if (query.docs.isEmpty) {
         setState(() => _errorMessage = "User not found");
@@ -71,21 +78,23 @@ class _AddMemberPageState extends State<AddMemberPage> {
       }
 
       final userDoc = query.docs.first;
-      final toUid = userDoc.id;
+      final toEmail = userDoc.id;
       final toData = userDoc.data();
 
       // Check invited user is not already in a household
       if (toData['householdId'] != null) {
-        setState(() => _errorMessage = "This user already belongs to a household.");
+        setState(
+          () => _errorMessage = "This user already belongs to a household.",
+        );
         return;
       }
 
-      final fromUid = currentUid!;
+      final fromEmail = currentEmail!;
 
       // Check for existing pending invite
       final existing = await _fire
           .collection('householdInvites')
-          .where('toUid', isEqualTo: toUid)
+          .where('toEmail', isEqualTo: toEmail)
           .where('householdId', isEqualTo: householdId)
           .where('status', isEqualTo: 'pending')
           .limit(1)
@@ -98,15 +107,15 @@ class _AddMemberPageState extends State<AddMemberPage> {
 
       // Create invite
       await _fire.collection('householdInvites').add({
-        'toUid': toUid,
-        'fromUid': fromUid,
+        'toEmail': toEmail,
+        'fromEmail': fromEmail,
         'householdId': householdId,
         'status': 'pending',
         'timestamp': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
-      Navigator.pop(context, toData['username'] ?? toUid);
+      Navigator.pop(context, toData['username'] ?? toEmail);
     } catch (e) {
       setState(() => _errorMessage = "Error: $e");
     } finally {
@@ -125,10 +134,14 @@ class _AddMemberPageState extends State<AddMemberPage> {
           children: [
             TextField(
               controller: _usernameController,
-              decoration: const InputDecoration(labelText: "Enter username", border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: "Enter username",
+                border: OutlineInputBorder(),
+              ),
             ),
             const SizedBox(height: 16),
-            if (_errorMessage != null) Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+            if (_errorMessage != null)
+              Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 16),
             _isLoading
                 ? const CircularProgressIndicator()

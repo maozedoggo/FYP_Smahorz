@@ -4,14 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class EditAddressPage extends StatefulWidget {
-  final Map<String, String> address;
-  final String userRole;
-  const EditAddressPage({
-    super.key,
-    required this.address,
-    required this.userRole,
-  });
+  final Map<String, String> initialAddress;
 
+  const EditAddressPage({super.key, required this.initialAddress});
 
   @override
   State<EditAddressPage> createState() => _EditAddressPageState();
@@ -25,6 +20,7 @@ class _EditAddressPageState extends State<EditAddressPage> {
   late TextEditingController _districtController;
   late TextEditingController _stateController;
   late TextEditingController _postalCodeController;
+  late TextEditingController _countryController;
 
   bool isLoading = true;
   DocumentReference? userDocRef;
@@ -33,29 +29,41 @@ class _EditAddressPageState extends State<EditAddressPage> {
   void initState() {
     super.initState();
 
+    // Initialize controllers with initial data from SettingsPage
     _addressLine1Controller = TextEditingController(
-      text: widget.address['line1'],
+      text: widget.initialAddress['addressLine1'] ?? '',
     );
     _addressLine2Controller = TextEditingController(
-      text: widget.address['line2'],
+      text: widget.initialAddress['addressLine2'] ?? '',
     );
     _districtController = TextEditingController(
-      text: widget.address['district'],
+      text: widget.initialAddress['district'] ?? '',
     );
-    _stateController = TextEditingController(text: widget.address['state']);
+    _stateController = TextEditingController(
+      text: widget.initialAddress['state'] ?? '',
+    );
     _postalCodeController = TextEditingController(
-      text: widget.address['postcode'],
+      text: widget.initialAddress['postalCode'] ?? '',
+    );
+    _countryController = TextEditingController(
+      text: widget.initialAddress['country'] ?? 'Malaysia',
     );
 
     _loadUserAddress();
   }
 
   Future<void> _loadUserAddress() async {
-    final email = FirebaseAuth.instance.currentUser?.email;
-    if (email == null) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() => isLoading = false);
+      return;
+    }
 
     try {
-      userDocRef = FirebaseFirestore.instance.collection('users').doc(email);
+      // Use email as document ID (users collection uses email as doc id)
+      userDocRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.email);
       final snapshot = await userDocRef!.get();
 
       if (snapshot.exists) {
@@ -66,19 +74,26 @@ class _EditAddressPageState extends State<EditAddressPage> {
           _districtController.text = data['district'] ?? '';
           _stateController.text = data['state'] ?? '';
           _postalCodeController.text = data['postalCode'] ?? '';
+          _countryController.text = data['country'] ?? 'Malaysia';
           isLoading = false;
         });
+
+        debugPrint("=== LOADED ADDRESS FROM FIRESTORE ===");
+        debugPrint("Address Line 1: ${data['addressLine1']}");
+        debugPrint("District: ${data['district']}");
+        debugPrint("State: ${data['state']}");
+        debugPrint("Postal Code: ${data['postalCode']}");
+        debugPrint("Country: ${data['country']}");
+        debugPrint("=== END DEBUG ===");
       } else {
         setState(() => isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("User document not found!")),
-        );
+        debugPrint("User document not found for email: ${user.email}");
+        // Don't show error - just use the initial data from SettingsPage
       }
     } catch (e) {
       setState(() => isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      debugPrint("Error loading address: $e");
+      // Don't show error - just use the initial data from SettingsPage
     }
   }
 
@@ -92,16 +107,25 @@ class _EditAddressPageState extends State<EditAddressPage> {
       "district": _districtController.text.trim(),
       "state": _stateController.text.trim(),
       "postalCode": _postalCodeController.text.trim(),
-      "country": "Malaysia",
+      "country": _countryController.text.trim(),
+      "updatedAt": FieldValue.serverTimestamp(),
     };
 
     try {
       await userDocRef!.set(updatedAddress, SetOptions(merge: true));
-      Navigator.pop(context, updatedAddress); // return updated map
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Address updated successfully!")),
+      );
+
+      // Return updated address to SettingsPage
+      Navigator.pop(context, updatedAddress);
     } catch (e) {
+      debugPrint("Error saving address: $e");
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Error updating: $e")));
+      ).showSnackBar(SnackBar(content: Text("Error updating address: $e")));
     }
   }
 
@@ -112,6 +136,7 @@ class _EditAddressPageState extends State<EditAddressPage> {
     _districtController.dispose();
     _stateController.dispose();
     _postalCodeController.dispose();
+    _countryController.dispose();
     super.dispose();
   }
 
@@ -119,7 +144,12 @@ class _EditAddressPageState extends State<EditAddressPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color.fromARGB(255, 240, 240, 241),
-      appBar: AppBar(title: const Text("Edit Address")),
+      appBar: AppBar(
+        title: const Text("Edit Address"),
+        actions: [
+          IconButton(icon: const Icon(Icons.save), onPressed: _saveAddress),
+        ],
+      ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
@@ -133,8 +163,9 @@ class _EditAddressPageState extends State<EditAddressPage> {
                       validator: (v) =>
                           v == null || v.trim().isEmpty ? 'Required' : null,
                       decoration: const InputDecoration(
-                        labelText: "Address Line 1",
+                        labelText: "Address Line 1*",
                         border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.home),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -143,6 +174,7 @@ class _EditAddressPageState extends State<EditAddressPage> {
                       decoration: const InputDecoration(
                         labelText: "Address Line 2",
                         border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.home_work),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -151,8 +183,9 @@ class _EditAddressPageState extends State<EditAddressPage> {
                       validator: (v) =>
                           v == null || v.trim().isEmpty ? 'Required' : null,
                       decoration: const InputDecoration(
-                        labelText: "District / City",
+                        labelText: "District / City*",
                         border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.location_city),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -161,8 +194,9 @@ class _EditAddressPageState extends State<EditAddressPage> {
                       validator: (v) =>
                           v == null || v.trim().isEmpty ? 'Required' : null,
                       decoration: const InputDecoration(
-                        labelText: "State",
+                        labelText: "State*",
                         border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.map),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -173,18 +207,36 @@ class _EditAddressPageState extends State<EditAddressPage> {
                       validator: (v) =>
                           v == null || v.trim().isEmpty ? 'Required' : null,
                       decoration: const InputDecoration(
-                        labelText: "Postal Code",
+                        labelText: "Postal Code*",
                         border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.markunread_mailbox),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: _saveAddress,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        padding: const EdgeInsets.all(12),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _countryController,
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Required' : null,
+                      decoration: const InputDecoration(
+                        labelText: "Country*",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.public),
                       ),
-                      child: const Text("Save Changes"),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _saveAddress,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          padding: const EdgeInsets.all(16),
+                        ),
+                        child: const Text(
+                          "Save Changes",
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ),
                     ),
                   ],
                 ),

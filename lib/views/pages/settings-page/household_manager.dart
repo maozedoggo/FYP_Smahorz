@@ -30,7 +30,10 @@ class _HouseholdManagerState extends State<HouseholdManager> {
     if (user == null) return;
 
     try {
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(user.email)
+          .get();
       final userData = userDoc.data();
       if (userData == null) return;
 
@@ -46,21 +49,22 @@ class _HouseholdManagerState extends State<HouseholdManager> {
         return;
       }
 
-      final householdDoc =
-          await _firestore.collection('households').doc(householdId).get();
+      final householdDoc = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .get();
 
       if (householdDoc.exists) {
         final data = householdDoc.data() ?? {};
-        final memberIds = List<String>.from(data['members'] ?? []);
-        final membersData = await Future.wait(memberIds.map((id) async {
-          final doc = await _firestore.collection('users').doc(id).get();
-          final d = doc.data() ?? {};
-          return {
-            'id': id,
-            'name': d['name'] ?? 'Unknown',
-            'email': d['email'] ?? 'No email',
-          };
-        }));
+        final memberEmails = List<String>.from(data['members'] ?? []);
+
+        final membersData = await Future.wait(
+          memberEmails.map((email) async {
+            final doc = await _firestore.collection('users').doc(email).get();
+            final d = doc.data() ?? {};
+            return {'email': email, 'name': d['name'] ?? 'Unknown'};
+          }),
+        );
 
         setState(() {
           _householdId = householdId;
@@ -102,16 +106,16 @@ class _HouseholdManagerState extends State<HouseholdManager> {
                   ? "Unnamed Household"
                   : controller.text.trim();
 
-              // Create household doc
-              final newHousehold =
-                  await _firestore.collection('households').add({
-                'name': name,
-                'adminId': user.uid,
-                'members': [user.uid],
-              });
+              // Create household document using email for admin and members
+              final newHousehold = await _firestore
+                  .collection('households')
+                  .add({
+                    'name': name,
+                    'adminId': user.email,
+                    'members': [user.email],
+                  });
 
-              // Update user to be admin and linked to household
-              await _firestore.collection('users').doc(user.uid).update({
+              await _firestore.collection('users').doc(user.email).update({
                 'householdId': newHousehold.id,
                 'isAdmin': true,
               });
@@ -120,7 +124,7 @@ class _HouseholdManagerState extends State<HouseholdManager> {
               _loadHouseholdData();
             },
             child: const Text("Create"),
-          )
+          ),
         ],
       ),
     );
@@ -139,84 +143,80 @@ class _HouseholdManagerState extends State<HouseholdManager> {
               final name = controller.text.trim();
               if (name.isEmpty || _householdId == null) return;
 
-              await _firestore
-                  .collection('households')
-                  .doc(_householdId)
-                  .set({'name': name}, SetOptions(merge: true));
+              await _firestore.collection('households').doc(_householdId).set({
+                'name': name,
+              }, SetOptions(merge: true));
 
               Navigator.pop(context);
               _loadHouseholdData();
             },
             child: const Text("Save"),
-          )
+          ),
         ],
       ),
     );
   }
 
-Future<void> _addMember() async {
-  final controller = TextEditingController();
-  await showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text("Invite Member"),
-      content: TextField(
-        controller: controller,
-        decoration: const InputDecoration(labelText: "Member Email"),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () async {
-            final email = controller.text.trim();
-            if (email.isEmpty || _householdId == null) return;
+  Future<void> _addMember() async {
+    final controller = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Invite Member"),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: "Member Email"),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              final email = controller.text.trim();
+              if (email.isEmpty || _householdId == null) return;
 
-            final userQuery = await _firestore
-                .collection('users')
-                .where('email', isEqualTo: email)
-                .limit(1)
-                .get();
+              // Check if user exists
+              final userDoc = await _firestore
+                  .collection('users')
+                  .doc(email)
+                  .get();
+              if (!userDoc.exists) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text("User not found")));
+                return;
+              }
 
-            if (userQuery.docs.isNotEmpty) {
-              final invitedUserId = userQuery.docs.first.id;
-              final inviterUid = _auth.currentUser!.uid;
-
-              // ✅ Create notification document instead of direct addition
+              // Create a notification for invitation
               await _firestore.collection('notifications').add({
-                'toUid': invitedUserId,
-                'fromUid': inviterUid,
+                'toEmail': email,
+                'fromEmail': _auth.currentUser!.email,
                 'householdId': _householdId,
                 'type': 'household_invite',
                 'status': 'pending',
                 'timestamp': FieldValue.serverTimestamp(),
               });
 
-              // Optional: show confirmation
               if (context.mounted) {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Invitation sent successfully")),
                 );
               }
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("User not found")),
-              );
-            }
-          },
-          child: const Text("Send Invite"),
-        )
-      ],
-    ),
-  );
-}
+            },
+            child: const Text("Send Invite"),
+          ),
+        ],
+      ),
+    );
+  }
 
-  Future<void> _removeMember(String memberId) async {
+  Future<void> _removeMember(String email) async {
     if (_householdId == null) return;
+
     await _firestore.collection('households').doc(_householdId).set({
-      'members': FieldValue.arrayRemove([memberId]),
+      'members': FieldValue.arrayRemove([email]),
     }, SetOptions(merge: true));
 
-    await _firestore.collection('users').doc(memberId).set({
+    await _firestore.collection('users').doc(email).set({
       'householdId': null,
       'isAdmin': false,
     }, SetOptions(merge: true));
@@ -229,10 +229,10 @@ Future<void> _addMember() async {
     if (user == null || _householdId == null) return;
 
     await _firestore.collection('households').doc(_householdId).set({
-      'members': FieldValue.arrayRemove([user.uid]),
+      'members': FieldValue.arrayRemove([user.email]),
     }, SetOptions(merge: true));
 
-    await _firestore.collection('users').doc(user.uid).set({
+    await _firestore.collection('users').doc(user.email).set({
       'householdId': null,
       'isAdmin': false,
     }, SetOptions(merge: true));
@@ -248,24 +248,27 @@ Future<void> _addMember() async {
       builder: (context) => AlertDialog(
         title: const Text("Delete Household?"),
         content: const Text(
-            "This will remove all members and delete the household permanently."),
+          "This will remove all members and delete the household permanently.",
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("Cancel")),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text("Delete")),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Delete"),
+          ),
         ],
       ),
     );
 
     if (confirm != true) return;
 
-    final members = _members.map((m) => m['id']).toList();
+    final members = _members.map((m) => m['email']).toList();
 
-    for (final memberId in members) {
-      await _firestore.collection('users').doc(memberId).set({
+    for (final email in members) {
+      await _firestore.collection('users').doc(email).set({
         'householdId': null,
         'isAdmin': false,
       }, SetOptions(merge: true));
@@ -299,9 +302,8 @@ Future<void> _addMember() async {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "🏠 $_householdName",
-              style:
-                  const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              _householdName,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             const Text("Members:"),
@@ -309,11 +311,14 @@ Future<void> _addMember() async {
               ListTile(
                 title: Text(member['name']),
                 subtitle: Text(member['email']),
-                trailing: _isAdmin && member['id'] != _auth.currentUser!.uid
+                trailing:
+                    _isAdmin && member['email'] != _auth.currentUser!.email
                     ? IconButton(
-                        icon:
-                            const Icon(Icons.remove_circle, color: Colors.red),
-                        onPressed: () => _removeMember(member['id']),
+                        icon: const Icon(
+                          Icons.remove_circle,
+                          color: Colors.red,
+                        ),
+                        onPressed: () => _removeMember(member['email']),
                       )
                     : null,
               ),
@@ -331,8 +336,9 @@ Future<void> _addMember() async {
               ),
               ElevatedButton.icon(
                 icon: const Icon(Icons.delete),
-                style:
-                    ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                ),
                 onPressed: _deleteHousehold,
                 label: const Text("Delete Household"),
               ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AddAdminPage extends StatelessWidget {
-  final List<String> members; // list of UID strings
+  final List<String> members; // list of member emails
   const AddAdminPage({super.key, required this.members});
 
   @override
@@ -16,10 +16,15 @@ class AddAdminPage extends StatelessWidget {
               itemBuilder: (context, index) {
                 final uid = members[index];
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: ListTile(
                     title: FutureBuilder(
-                      future: Future.microtask(() => true).then((_) => uid), // placeholder - we return uid immediately
+                      future: Future.microtask(() => true).then(
+                        (_) => uid,
+                      ), // placeholder - we return email immediately
                       builder: (context, snapshot) {
                         // If you want to show username instead of UID, you can fetch user doc here.
                         return Text(uid);
@@ -30,7 +35,9 @@ class AddAdminPage extends StatelessWidget {
                         // Return selected UID back to caller for promotion
                         Navigator.pop(context, uid);
                       },
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                      ),
                       child: const Text("Promote"),
                     ),
                   ),

@@ -10,12 +10,13 @@ class NotificationPage extends StatelessWidget {
     String notificationId,
     String status,
     String householdId,
-    String userUid,
-    String inviterUid,
+    String userEmail,
+    String inviterEmail,
     String householdName,
   ) async {
-    final notificationRef =
-        FirebaseFirestore.instance.collection('notifications').doc(notificationId);
+    final notificationRef = FirebaseFirestore.instance
+        .collection('notifications')
+        .doc(notificationId);
 
     // update invite status
     await notificationRef.update({'status': status});
@@ -26,23 +27,20 @@ class NotificationPage extends StatelessWidget {
       // add user to household members collection under inviter (optional structure)
       await firestore
           .collection('users')
-          .doc(inviterUid)
+          .doc(inviterEmail)
           .collection('householdMembers')
-          .doc(userUid)
-          .set({
-        'uid': userUid,
-        'joinedAt': FieldValue.serverTimestamp(),
-      });
+          .doc(userEmail)
+          .set({'email': userEmail, 'joinedAt': FieldValue.serverTimestamp()});
 
       // update invited user's profile with householdId
-      await firestore.collection('users').doc(userUid).update({
+      await firestore.collection('users').doc(userEmail).update({
         'householdId': householdId,
       });
 
       // notify inviter about acceptance
       await firestore.collection('notifications').add({
-        'toUid': inviterUid,
-        'fromUid': userUid,
+        'toEmail': inviterEmail,
+        'fromEmail': userEmail,
         'householdId': householdId,
         'householdName': householdName,
         'type': 'household_response',
@@ -51,8 +49,8 @@ class NotificationPage extends StatelessWidget {
       });
     } else if (status == 'rejected') {
       await firestore.collection('notifications').add({
-        'toUid': inviterUid,
-        'fromUid': userUid,
+        'toEmail': inviterEmail,
+        'fromEmail': userEmail,
         'householdId': householdId,
         'householdName': householdName,
         'type': 'household_response',
@@ -62,32 +60,44 @@ class NotificationPage extends StatelessWidget {
     }
   }
 
-  Future<String> _getUserDisplayName(String uid) async {
-    if (uid.isEmpty) return "Unknown";
+  Future<String> _getUserDisplayName(String email) async {
+    if (email.isEmpty) return "Unknown";
     try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(email)
+          .get();
       final data = doc.data();
       if (data == null) return "Unknown";
       // try common name fields
-      return (data['username'] ?? data['name'] ?? data['email'] ?? "Unknown") as String;
+      return (data['username'] ?? data['name'] ?? data['email'] ?? "Unknown")
+          as String;
     } catch (e) {
       return "Unknown";
     }
   }
 
   Future<void> _markAsRead(String id) async {
-    await FirebaseFirestore.instance.collection('notifications').doc(id).update({'status': 'read'});
+    await FirebaseFirestore.instance.collection('notifications').doc(id).update(
+      {'status': 'read'},
+    );
   }
 
   Future<void> _deleteNotification(String id) async {
-    await FirebaseFirestore.instance.collection('notifications').doc(id).delete();
+    await FirebaseFirestore.instance
+        .collection('notifications')
+        .doc(id)
+        .delete();
   }
 
   DateTime? _getSentAt(Map<String, dynamic> data, DocumentSnapshot doc) {
     // Accept sentAt, timestamp, createdAt, or use documentCreateTime fallback
-    if (data['sentAt'] is Timestamp) return (data['sentAt'] as Timestamp).toDate();
-    if (data['timestamp'] is Timestamp) return (data['timestamp'] as Timestamp).toDate();
-    if (data['createdAt'] is Timestamp) return (data['createdAt'] as Timestamp).toDate();
+    if (data['sentAt'] is Timestamp)
+      return (data['sentAt'] as Timestamp).toDate();
+    if (data['timestamp'] is Timestamp)
+      return (data['timestamp'] as Timestamp).toDate();
+    if (data['createdAt'] is Timestamp)
+      return (data['createdAt'] as Timestamp).toDate();
     return null;
   }
 
@@ -116,36 +126,39 @@ class NotificationPage extends StatelessWidget {
     if (type != null && type.isNotEmpty) {
       return type;
     }
-    
+
     // Auto-detect type based on field presence
     final householdId = data['householdId'] as String?;
     final status = data['status'] as String?;
-    
+
     if (householdId != null && householdId.isNotEmpty && status == 'pending') {
       return 'household_invite';
     }
-    
+
     return 'unknown';
   }
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? "";
-    
-    // Debug: Print current user UID to verify
-    print("Current user UID: $uid");
-    
+    final email = FirebaseAuth.instance.currentUser?.email ?? "";
+
+    // Debug: Print current user email to verify
+    print("Current user email: $email");
+
     return Scaffold(
       backgroundColor: const Color(0xFF0B1220),
       appBar: AppBar(
         backgroundColor: const Color(0xFF07101A),
         centerTitle: true,
-        title: const Text("Notifications", style: TextStyle(color: Colors.white)),
+        title: const Text(
+          "Notifications",
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('notifications')
-            .where('toUid', isEqualTo: uid)
+            .where('toEmail', isEqualTo: email)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -165,8 +178,8 @@ class NotificationPage extends StatelessWidget {
           }
 
           final docs = snapshot.data?.docs ?? [];
-          print("Found ${docs.length} notifications for user $uid");
-          
+          print("Found ${docs.length} notifications for user $email");
+
           // Debug: Print all notification documents
           for (final doc in docs) {
             print("Notification doc: ${doc.id} - ${doc.data()}");
@@ -175,15 +188,17 @@ class NotificationPage extends StatelessWidget {
           if (docs.isEmpty) {
             return const Center(
               child: Text(
-                "No notifications yet.", 
-                style: TextStyle(color: Colors.white70)
+                "No notifications yet.",
+                style: TextStyle(color: Colors.white70),
               ),
             );
           }
 
           // Convert docs to list of maps + keep original doc for id
           final list = docs.map((d) {
-            final m = Map<String, dynamic>.from(d.data() as Map<String, dynamic>);
+            final m = Map<String, dynamic>.from(
+              d.data() as Map<String, dynamic>,
+            );
             m['_id'] = d.id;
             m['_doc'] = d;
             m['_sentAt'] = _getSentAt(m, d);
@@ -207,17 +222,17 @@ class NotificationPage extends StatelessWidget {
               final item = list[index];
               final id = item['_id'] as String;
               final data = Map<String, dynamic>.from(item);
-              
+
               print("Building notification: $data");
-              
+
               final type = _determineNotificationType(data);
               final status = (data['status'] as String?) ?? 'pending';
-              final fromUid = (data['fromUid'] as String?) ?? '';
+              final fromEmail = (data['fromEmail'] as String?) ?? '';
               final householdId = (data['householdId'] as String?) ?? '';
               final householdName = (data['householdName'] as String?) ?? '';
 
               return FutureBuilder<String>(
-                future: _getUserDisplayName(fromUid),
+                future: _getUserDisplayName(fromEmail),
                 builder: (context, nameSnap) {
                   final inviter = nameSnap.data ?? "Someone";
 
@@ -242,7 +257,9 @@ class NotificationPage extends StatelessWidget {
                       break;
                     default:
                       title = "Notification";
-                      subtitle = data['message']?.toString() ?? "You have a new notification.";
+                      subtitle =
+                          data['message']?.toString() ??
+                          "You have a new notification.";
                   }
 
                   return Dismissible(
@@ -260,29 +277,29 @@ class NotificationPage extends StatelessWidget {
                       child: const Icon(Icons.delete, color: Colors.white),
                     ),
                     confirmDismiss: (dir) async {
-  // Capture the messenger early to avoid using a deactivated context later
-  final messenger = ScaffoldMessenger.of(context);
+                      // Capture the messenger early to avoid using a deactivated context later
+                      final messenger = ScaffoldMessenger.of(context);
 
-  if (dir == DismissDirection.startToEnd) {
-    await _markAsRead(id);
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text("Marked as read"),
-        backgroundColor: Colors.green,
-      ),
-    );
-    return false; // don’t remove from the list
-  } else {
-    await _deleteNotification(id);
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text("Deleted"),
-        backgroundColor: Colors.redAccent,
-      ),
-    );
-    return true; // allow Dismissible to remove it
-  }
-},
+                      if (dir == DismissDirection.startToEnd) {
+                        await _markAsRead(id);
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text("Marked as read"),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                        return false; // don’t remove from the list
+                      } else {
+                        await _deleteNotification(id);
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text("Deleted"),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                        return true; // allow Dismissible to remove it
+                      }
+                    },
 
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -293,23 +310,30 @@ class NotificationPage extends StatelessWidget {
                             vertical: 12,
                           ),
                           title: Text(
-                            title, 
+                            title,
                             style: const TextStyle(
-                              color: Colors.white, 
-                              fontWeight: FontWeight.bold
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                           subtitle: Text(
-                            subtitle, 
-                            style: const TextStyle(color: Colors.white70)
+                            subtitle,
+                            style: const TextStyle(color: Colors.white70),
                           ),
-                          trailing: (type == 'household_invite' && status == 'pending')
+                          trailing:
+                              (type == 'household_invite' &&
+                                  status == 'pending')
                               ? Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     TextButton(
                                       onPressed: () => respondToInvite(
-                                        id, 'accepted', householdId, uid, fromUid, householdName
+                                        id,
+                                        'accepted',
+                                        householdId,
+                                        email,
+                                        fromEmail,
+                                        householdName,
                                       ),
                                       style: TextButton.styleFrom(
                                         foregroundColor: Colors.greenAccent,
@@ -318,7 +342,12 @@ class NotificationPage extends StatelessWidget {
                                     ),
                                     TextButton(
                                       onPressed: () => respondToInvite(
-                                        id, 'rejected', householdId, uid, fromUid, householdName
+                                        id,
+                                        'rejected',
+                                        householdId,
+                                        email,
+                                        fromEmail,
+                                        householdName,
                                       ),
                                       style: TextButton.styleFrom(
                                         foregroundColor: Colors.redAccent,

@@ -2,6 +2,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:smart_horizon_home/views/pages/settings-page/edit_address_page.dart';
 import 'member_profile_page.dart';
 import 'household_voting.dart';
 
@@ -23,7 +24,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool isSendingInvite = false;
 
   // current user & household
-  String? currentUid;
+  String? currentEmail;
   DocumentReference<Map<String, dynamic>>? currentUserDocRef;
   String? householdId;
   DocumentReference<Map<String, dynamic>>? householdDocRef;
@@ -32,8 +33,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // household fields
   String householdAddressText = "";
-  List<String> memberUids = [];
-  List<String> adminUids = [];
+  List<String> memberEmails = [];
+  List<String> adminEmails = [];
 
   // controllers (household info / invite)
   final TextEditingController _nameCtrl = TextEditingController();
@@ -56,8 +57,13 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
 
-    currentUid = user.uid;
-    currentUserDocRef = _fire.collection('users').doc(currentUid);
+    // Use email as the document id in the users collection
+    currentEmail = user.email;
+    if (currentEmail == null) {
+      setState(() => isLoading = false);
+      return;
+    }
+    currentUserDocRef = _fire.collection('users').doc(currentEmail);
 
     try {
       final userSnap = await currentUserDocRef!.get();
@@ -103,8 +109,8 @@ class _SettingsPageState extends State<SettingsPage> {
             householdAddressText = address;
             _nameCtrl.text = householdName ?? "";
             _addressCtrl.text = householdAddressText;
-            memberUids = List<String>.from(hData['members'] ?? []);
-            adminUids = List<String>.from(hData['admins'] ?? []);
+            memberEmails = List<String>.from(hData['members'] ?? []);
+            adminEmails = List<String>.from(hData['admins'] ?? []);
           });
 
           debugPrint("=== ADDRESS DEBUG ===");
@@ -122,8 +128,8 @@ class _SettingsPageState extends State<SettingsPage> {
             householdId = null;
             userRole = null;
             householdName = null;
-            memberUids = [];
-            adminUids = [];
+            memberEmails = [];
+            adminEmails = [];
             householdAddressText = userAddress; // Keep user address
             _nameCtrl.clear();
             _addressCtrl.text = userAddress; // Keep user address in controller
@@ -133,8 +139,8 @@ class _SettingsPageState extends State<SettingsPage> {
         // not in any household - STILL SHOW USER ADDRESS
         setState(() {
           householdName = null;
-          memberUids = [];
-          adminUids = [];
+          memberEmails = [];
+          adminEmails = [];
           householdAddressText = userAddress;
           _nameCtrl.clear();
           _addressCtrl.text =
@@ -213,7 +219,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _createHousehold(String name) async {
-    if (currentUid == null) return;
+    if (currentEmail == null) return;
     setState(() => isLoading = true);
     try {
       final userSnap = await currentUserDocRef!.get();
@@ -225,9 +231,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
       final householdRef = await _fire.collection('households').add({
         'name': name,
-        'ownerId': currentUid,
-        'members': [currentUid],
-        'admins': [currentUid],
+        'ownerId': currentEmail,
+        'members': [currentEmail],
+        'admins': [currentEmail],
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -284,7 +290,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // ---------- Invite member (by email) ----------
   Future<void> _sendInvite() async {
-    if (householdId == null || currentUid == null) return;
+    if (householdId == null || currentEmail == null) return;
     if (!(userRole == 'owner' || userRole == 'admin')) {
       _showInfo("Only admins can invite members.");
       return;
@@ -307,7 +313,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (query.docs.isEmpty) {
         // If user doesn't exist, create notification with email reference
         await _fire.collection('notifications').add({
-          'fromUid': currentUid,
+          'fromEmail': currentEmail,
           'toEmail': email,
           'householdId': householdId,
           'householdName': householdName,
@@ -321,7 +327,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
 
       final userDoc = query.docs.first;
-      final toUid = userDoc.id;
+      final toEmail = userDoc.id; // doc id is email
       final userData = userDoc.data();
       if ((userData['householdId'] as String?) != null) {
         _showInfo("User already belongs to a household.");
@@ -331,7 +337,7 @@ class _SettingsPageState extends State<SettingsPage> {
       // check existing notification
       final existing = await _fire
           .collection('notifications')
-          .where('toUid', isEqualTo: toUid)
+          .where('toEmail', isEqualTo: toEmail)
           .where('householdId', isEqualTo: householdId)
           .where('status', isEqualTo: 'pending')
           .limit(1)
@@ -342,8 +348,8 @@ class _SettingsPageState extends State<SettingsPage> {
       }
 
       await _fire.collection('notifications').add({
-        'fromUid': currentUid,
-        'toUid': toUid,
+        'fromEmail': currentEmail,
+        'toEmail': toEmail,
         'householdId': householdId,
         'householdName': householdName,
         'type': 'household_invite',
@@ -366,7 +372,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   // ---------- Remove member ----------
-  Future<void> _removeMember(String uid) async {
+  Future<void> _removeMember(String email) async {
     if (householdDocRef == null) return;
     if (!(userRole == 'owner' || userRole == 'admin')) {
       _showInfo("Only owners or admins can remove members.");
@@ -376,7 +382,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final hSnap = await householdDocRef!.get();
     final hData = hSnap.data()!;
     final ownerId = hData['ownerId'] as String?;
-    if (uid == ownerId) {
+    if (email == ownerId) {
       _showInfo("Cannot remove the owner. Transfer ownership first.");
       return;
     }
@@ -387,10 +393,10 @@ class _SettingsPageState extends State<SettingsPage> {
         final data = snap.data()!;
         final members = List<String>.from(data['members'] ?? []);
         final admins = List<String>.from(data['admins'] ?? []);
-        members.remove(uid);
-        admins.remove(uid);
+        members.remove(email);
+        admins.remove(email);
         tx.update(householdDocRef!, {'members': members, 'admins': admins});
-        final userRef = _fire.collection('users').doc(uid);
+        final userRef = _fire.collection('users').doc(email);
         tx.update(userRef, {'householdId': null, 'role': null});
       });
       await _loadData();
@@ -406,18 +412,18 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   // ---------- Transfer admin (make other user owner/admin) ----------
-  Future<void> _transferOwnership(String newOwnerUid) async {
+  Future<void> _transferOwnership(String newOwnerEmail) async {
     if (householdDocRef == null) return;
     if (userRole != 'owner') {
       _showInfo("Only the owner can transfer ownership.");
       return;
     }
-    if (newOwnerUid == currentUid) {
+    if (newOwnerEmail == currentEmail) {
       _showInfo("You already are the owner.");
       return;
     }
 
-    final name = await _getMemberName(newOwnerUid) ?? newOwnerUid;
+    final name = await _getMemberName(newOwnerEmail) ?? newOwnerEmail;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -447,14 +453,17 @@ class _SettingsPageState extends State<SettingsPage> {
       final admins = List<String>.from(hData['admins'] ?? []);
 
       // ensure newOwner is in admins
-      if (!admins.contains(newOwnerUid)) admins.add(newOwnerUid);
+      if (!admins.contains(newOwnerEmail)) admins.add(newOwnerEmail);
       // keep old owner in admins (or demote to admin)
       if (oldOwner != null && !admins.contains(oldOwner)) admins.add(oldOwner);
 
       await _fire.runTransaction((tx) async {
-        tx.update(householdDocRef!, {'ownerId': newOwnerUid, 'admins': admins});
+        tx.update(householdDocRef!, {
+          'ownerId': newOwnerEmail,
+          'admins': admins,
+        });
         // set new owner role
-        tx.update(_fire.collection('users').doc(newOwnerUid), {
+        tx.update(_fire.collection('users').doc(newOwnerEmail), {
           'role': 'owner',
         });
         // demote previous owner to admin
@@ -475,13 +484,13 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   // ---------- Demote admin ----------
-  Future<void> _demoteAdmin(String uid) async {
+  Future<void> _demoteAdmin(String email) async {
     if (householdDocRef == null) return;
     if (userRole != 'owner') {
       _showInfo("Only owner can demote admins.");
       return;
     }
-    if (uid == currentUid) {
+    if (email == currentEmail) {
       _showInfo("Owner cannot demote themselves here.");
       return;
     }
@@ -490,9 +499,9 @@ class _SettingsPageState extends State<SettingsPage> {
       final hSnap = await householdDocRef!.get();
       final hData = hSnap.data()!;
       final admins = List<String>.from(hData['admins'] ?? []);
-      admins.remove(uid);
+      admins.remove(email);
       await householdDocRef!.update({'admins': admins});
-      await _fire.collection('users').doc(uid).set({
+      await _fire.collection('users').doc(email).set({
         'role': 'member',
       }, SetOptions(merge: true));
       await _loadData();
@@ -515,7 +524,7 @@ class _SettingsPageState extends State<SettingsPage> {
       final hSnap = await householdDocRef!.get();
       final hData = hSnap.data()!;
       final ownerId = hData['ownerId'] as String?;
-      if (userRole == 'owner' && currentUid == ownerId) {
+      if (userRole == 'owner' && currentEmail == ownerId) {
         // confirm deletion
         final confirm = await showDialog<bool>(
           context: context,
@@ -541,8 +550,8 @@ class _SettingsPageState extends State<SettingsPage> {
         // delete household and clear all members
         final members = List<String>.from(hData['members'] ?? []);
         final batch = _fire.batch();
-        for (final uid in members) {
-          final uRef = _fire.collection('users').doc(uid);
+        for (final e in members) {
+          final uRef = _fire.collection('users').doc(e);
           batch.update(uRef, {'householdId': null, 'role': null});
         }
         batch.delete(householdDocRef!);
@@ -558,10 +567,10 @@ class _SettingsPageState extends State<SettingsPage> {
       // non-owner leave
       final members = List<String>.from(hData['members'] ?? []);
       final admins = List<String>.from(hData['admins'] ?? []);
-      members.remove(currentUid);
-      admins.remove(currentUid);
+      members.remove(currentEmail);
+      admins.remove(currentEmail);
       await householdDocRef!.update({'members': members, 'admins': admins});
-      await _fire.collection('users').doc(currentUid).update({
+      await _fire.collection('users').doc(currentEmail).update({
         'householdId': null,
         'role': null,
       });
@@ -592,12 +601,12 @@ class _SettingsPageState extends State<SettingsPage> {
     ),
   );
 
-  Future<String?> _getMemberName(String uid) async {
+  Future<String?> _getMemberName(String email) async {
     try {
-      final snap = await _fire.collection('users').doc(uid).get();
+      final snap = await _fire.collection('users').doc(email).get();
       final data = snap.data();
       if (data == null) return null;
-      return data['username'] ?? data['email'] ?? uid;
+      return data['username'] ?? data['email'] ?? email;
     } catch (e) {
       return null;
     }
@@ -642,10 +651,125 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // Personal Information Card
+  Widget _personalInfoCard() {
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _headerRow(Icons.person, "Personal Information"),
+          const SizedBox(height: 12),
+
+          // Display user info
+          FutureBuilder<DocumentSnapshot>(
+            future: currentUserDocRef?.get(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const CircularProgressIndicator();
+              }
+              final userData =
+                  snapshot.data?.data() as Map<String, dynamic>? ?? {};
+              final email = userData['email'] ?? 'No email';
+              final name = userData['name'] ?? 'No name';
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Name: $name",
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Email: $email",
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Display address if available
+                  if (householdAddressText.isNotEmpty) ...[
+                    Text(
+                      "Your Address:",
+                      style: TextStyle(
+                        color: Colors.grey.shade300,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      householdAddressText,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ],
+              );
+            },
+          ),
+
+          // Edit Address Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                final user = _auth.currentUser;
+                if (user == null) return;
+
+                try {
+                  final userDoc = await _fire
+                      .collection('users')
+                      .doc(user.email)
+                      .get();
+                  final userData = userDoc.data() ?? {};
+
+                  final updatedAddress = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => EditAddressPage(
+                        initialAddress: {
+                          'addressLine1': userData['addressLine1'] ?? '',
+                          'addressLine2': userData['addressLine2'] ?? '',
+                          'district': userData['district'] ?? '',
+                          'state': userData['state'] ?? '',
+                          'postalCode': userData['postalCode'] ?? '',
+                          'country': userData['country'] ?? 'Malaysia',
+                        },
+                      ),
+                    ),
+                  );
+
+                  if (updatedAddress != null) {
+                    await _loadData();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Address updated successfully!"),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Error loading address: $e")),
+                  );
+                }
+              },
+              icon: const Icon(Icons.edit_location_alt),
+              label: const Text("Edit Personal Address"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _householdInfoCard() {
-    final canEdit =
-        _isAdmin &&
-        householdId != null; // Only show save button if in household
+    final canEdit = _isAdmin && householdId != null;
     final saveDisabled =
         isSavingHousehold ||
         (_nameCtrl.text.trim() == (householdName ?? "").trim() &&
@@ -760,15 +884,15 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _memberTileWidget(String uid) {
+  Widget _memberTileWidget(String email) {
     return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: _fire.collection('users').doc(uid).get(),
+      future: _fire.collection('users').doc(email).get(),
       builder: (context, snap) {
         final data = snap.data?.data();
-        final name = data?['username'] ?? data?['email'] ?? uid;
+        final name = data?['username'] ?? data?['email'] ?? email;
         final role =
-            data?['role'] ?? (adminUids.contains(uid) ? 'admin' : 'member');
-        final isCurrentUser = uid == currentUid;
+            data?['role'] ?? (adminEmails.contains(email) ? 'admin' : 'member');
+        final isCurrentUser = email == currentEmail;
 
         return Container(
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -834,7 +958,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             Icons.delete_outline,
                             color: Colors.redAccent,
                           ),
-                          onPressed: () => _removeMember(uid),
+                          onPressed: () => _removeMember(email),
                           tooltip: "Remove member",
                         ),
                         // Promote / Transfer owner (only owner can transfer)
@@ -844,7 +968,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               Icons.manage_accounts,
                               color: Colors.orangeAccent,
                             ),
-                            onPressed: () => _transferOwnership(uid),
+                            onPressed: () => _transferOwnership(email),
                             tooltip: "Transfer ownership",
                           ),
                         // If current user is admin (and not owner), allow promote to admin (simple promote)
@@ -863,11 +987,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                 final admins = List<String>.from(
                                   hData['admins'] ?? [],
                                 );
-                                if (!admins.contains(uid)) admins.add(uid);
+                                if (!admins.contains(email)) admins.add(email);
                                 await householdDocRef!.update({
                                   'admins': admins,
                                 });
-                                await _fire.collection('users').doc(uid).set({
+                                await _fire.collection('users').doc(email).set({
                                   'role': 'admin',
                                 }, SetOptions(merge: true));
                                 await _loadData();
@@ -908,7 +1032,7 @@ class _SettingsPageState extends State<SettingsPage> {
           _headerRow(Icons.group, "Household Members"),
           const SizedBox(height: 12),
           Column(
-            children: memberUids.map((u) => _memberTileWidget(u)).toList(),
+            children: memberEmails.map((u) => _memberTileWidget(u)).toList(),
           ),
           const SizedBox(height: 12),
           if (_isAdmin)
@@ -1047,8 +1171,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                 final selected = await showDialog<String?>(
                                   context: context,
                                   builder: (_) => TransferOwnerDialog(
-                                    members: memberUids
-                                        .where((u) => u != currentUid)
+                                    members: memberEmails
+                                        .where((u) => u != currentEmail)
                                         .toList(),
                                     fire: _fire,
                                   ),
@@ -1108,7 +1232,7 @@ class _SettingsPageState extends State<SettingsPage> {
       appBar: AppBar(
         leading: IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: Icon(Icons.arrow_back_ios, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
         ),
         backgroundColor: const Color(0xFF07101A),
         centerTitle: true,
@@ -1134,7 +1258,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          householdName ?? "",
+                          householdName ?? "Settings",
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 28,
@@ -1144,7 +1268,11 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       const SizedBox(height: 16),
 
-                      // CONDITIONAL RENDERING - FIXED VERSION
+                      // Personal Information Card
+                      _personalInfoCard(),
+                      const SizedBox(height: 16),
+
+                      // CONDITIONAL RENDERING
                       if (householdId == null)
                         Column(
                           children: [
@@ -1183,7 +1311,12 @@ class _SettingsPageState extends State<SettingsPage> {
                               icon: const Icon(Icons.logout),
                               label: const Text("Leave Household"),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red.shade700,
+                                backgroundColor: const Color.fromARGB(
+                                  255,
+                                  131,
+                                  125,
+                                  125,
+                                ),
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 14,
                                   horizontal: 18,
@@ -1218,7 +1351,7 @@ class TransferOwnerDialog extends StatefulWidget {
 }
 
 class _TransferOwnerDialogState extends State<TransferOwnerDialog> {
-  String? _selectedUid;
+  String? _selectedEmail;
 
   @override
   Widget build(BuildContext context) {
@@ -1234,15 +1367,15 @@ class _TransferOwnerDialogState extends State<TransferOwnerDialog> {
             else
               FutureBuilder<List<Map<String, String>>>(
                 future: Future.wait(
-                  widget.members.map((uid) async {
+                  widget.members.map((email) async {
                     final doc = await widget.fire
                         .collection('users')
-                        .doc(uid)
+                        .doc(email)
                         .get();
                     final data = doc.data();
                     return {
-                      'uid': uid,
-                      'label': data?['username'] ?? data?['email'] ?? uid,
+                      'email': email,
+                      'label': data?['username'] ?? data?['email'] ?? email,
                     };
                   }),
                 ),
@@ -1257,17 +1390,17 @@ class _TransferOwnerDialogState extends State<TransferOwnerDialog> {
                   final list = snap.data!;
                   return DropdownButton<String>(
                     isExpanded: true,
-                    value: _selectedUid,
+                    value: _selectedEmail,
                     hint: const Text("Select member"),
                     items: list.map((member) {
                       return DropdownMenuItem<String>(
-                        value: member['uid'],
+                        value: member['email'],
                         child: Text(member['label']!),
                       );
                     }).toList(),
                     onChanged: (val) {
                       setState(() {
-                        _selectedUid = val;
+                        _selectedEmail = val;
                       });
                     },
                   );
@@ -1282,11 +1415,11 @@ class _TransferOwnerDialogState extends State<TransferOwnerDialog> {
           child: const Text("Cancel"),
         ),
         ElevatedButton(
-          onPressed: _selectedUid == null
+          onPressed: _selectedEmail == null
               ? null
               : () {
                   // Handle ownership transfer logic here
-                  Navigator.pop(context, _selectedUid);
+                  Navigator.pop(context, _selectedEmail);
                 },
           child: const Text("Transfer"),
         ),
