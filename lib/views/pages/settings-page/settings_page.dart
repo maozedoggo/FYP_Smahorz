@@ -682,7 +682,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(height: 4),
                   Text(
                     "Email: $email",
-                    style: const TextStyle(color: Colors.white70),
+                    style: const TextStyle(color: Colors.white),
                   ),
                   const SizedBox(height: 12),
 
@@ -755,8 +755,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   );
                 }
               },
-              icon: const Icon(Icons.edit_location_alt),
-              label: const Text("Edit Personal Address"),
+              icon: const Icon(Icons.edit_location_alt, color: Colors.white),
+              label: const Text(
+                "Edit Personal Address",
+                style: TextStyle(color: Colors.white),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade600,
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -786,6 +789,7 @@ class _SettingsPageState extends State<SettingsPage> {
             enabled: canEdit && !isSavingHousehold,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.home),
               labelText: "Household Name",
               labelStyle: TextStyle(color: Colors.grey.shade300),
               filled: true,
@@ -1078,8 +1082,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Icon(Icons.send),
-                      label: const Text("Send"),
+                          : const Icon(Icons.send, color: Colors.white,),
+                      label: const Text("Send", style: TextStyle(color: Colors.white),),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue.shade600,
                         padding: const EdgeInsets.symmetric(
@@ -1181,7 +1185,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   _transferOwnership(selected);
                                 }
                               },
-                              child: const Text("Transfer Owner"),
+                              child: const Text("Transfer Owner", style: TextStyle(color: Color(0xFF111827)),),
                             )
                           else
                             Container(
@@ -1258,7 +1262,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          householdName ?? "Settings",
+                          householdName ?? "",
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 28,
@@ -1281,8 +1285,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             Center(
                               child: ElevatedButton.icon(
                                 onPressed: _createHouseholdDialog,
-                                icon: const Icon(Icons.add_home_work),
-                                label: const Text("Create Household"),
+                                icon: const Icon(Icons.add_home_work, color: Colors.white,),
+                                label: const Text("Create Household", style: TextStyle(color: Colors.white),),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blue.shade600,
                                   padding: const EdgeInsets.symmetric(
@@ -1308,15 +1312,10 @@ class _SettingsPageState extends State<SettingsPage> {
                             // Leave household button
                             ElevatedButton.icon(
                               onPressed: _leaveHousehold,
-                              icon: const Icon(Icons.logout),
-                              label: const Text("Leave Household"),
+                              icon: const Icon(Icons.logout, color: Colors.white,),
+                              label: const Text("Leave Household", style: TextStyle(color: Colors.white),),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color.fromARGB(
-                                  255,
-                                  131,
-                                  125,
-                                  125,
-                                ),
+                                backgroundColor: const Color.fromARGB(255, 199, 58, 58),
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 14,
                                   horizontal: 18,
