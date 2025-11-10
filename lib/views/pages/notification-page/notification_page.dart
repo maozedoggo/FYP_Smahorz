@@ -77,27 +77,17 @@ class NotificationPage extends StatelessWidget {
     }
   }
 
-  Future<void> _markAsRead(String id) async {
-    await FirebaseFirestore.instance.collection('notifications').doc(id).update(
-      {'status': 'read'},
-    );
-  }
-
-  Future<void> _deleteNotification(String id) async {
-    await FirebaseFirestore.instance
-        .collection('notifications')
-        .doc(id)
-        .delete();
-  }
-
   DateTime? _getSentAt(Map<String, dynamic> data, DocumentSnapshot doc) {
     // Accept sentAt, timestamp, createdAt, or use documentCreateTime fallback
-    if (data['sentAt'] is Timestamp)
+    if (data['sentAt'] is Timestamp) {
       return (data['sentAt'] as Timestamp).toDate();
-    if (data['timestamp'] is Timestamp)
+    }
+    if (data['timestamp'] is Timestamp) {
       return (data['timestamp'] as Timestamp).toDate();
-    if (data['createdAt'] is Timestamp)
+    }
+    if (data['createdAt'] is Timestamp) {
       return (data['createdAt'] as Timestamp).toDate();
+    }
     return null;
   }
 
@@ -110,7 +100,7 @@ class NotificationPage extends StatelessWidget {
         border: Border.all(color: Colors.grey.shade800),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.35),
+            color: Color.fromRGBO(0, 0, 0, 0.35),
             blurRadius: 8,
             offset: const Offset(0, 6),
           ),
@@ -142,9 +132,6 @@ class NotificationPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final email = FirebaseAuth.instance.currentUser?.email ?? "";
 
-    // Debug: Print current user email to verify
-    print("Current user email: $email");
-
     return Scaffold(
       backgroundColor: const Color(0xFF0B1220),
       appBar: AppBar(
@@ -162,7 +149,6 @@ class NotificationPage extends StatelessWidget {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            print("Stream error: ${snapshot.error}");
             return Center(
               child: Text(
                 "Error: ${snapshot.error}",
@@ -178,12 +164,6 @@ class NotificationPage extends StatelessWidget {
           }
 
           final docs = snapshot.data?.docs ?? [];
-          print("Found ${docs.length} notifications for user $email");
-
-          // Debug: Print all notification documents
-          for (final doc in docs) {
-            print("Notification doc: ${doc.id} - ${doc.data()}");
-          }
 
           if (docs.isEmpty) {
             return const Center(
@@ -223,8 +203,6 @@ class NotificationPage extends StatelessWidget {
               final id = item['_id'] as String;
               final data = Map<String, dynamic>.from(item);
 
-              print("Building notification: $data");
-
               final type = _determineNotificationType(data);
               final status = (data['status'] as String?) ?? 'pending';
               final fromEmail = (data['fromEmail'] as String?) ?? '';
@@ -262,103 +240,59 @@ class NotificationPage extends StatelessWidget {
                           "You have a new notification.";
                   }
 
-                  return Dismissible(
-                    key: Key(id),
-                    background: Container(
-                      color: Colors.green.withOpacity(0.7),
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: const Icon(Icons.check, color: Colors.white),
-                    ),
-                    secondaryBackground: Container(
-                      color: Colors.red.withOpacity(0.7),
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: const Icon(Icons.delete, color: Colors.white),
-                    ),
-                    confirmDismiss: (dir) async {
-                      // Capture the messenger early to avoid using a deactivated context later
-                      final messenger = ScaffoldMessenger.of(context);
-
-                      if (dir == DismissDirection.startToEnd) {
-                        await _markAsRead(id);
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: Text("Marked as read"),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                        return false; // don’t remove from the list
-                      } else {
-                        await _deleteNotification(id);
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: Text("Deleted"),
-                            backgroundColor: Colors.redAccent,
-                          ),
-                        );
-                        return true; // allow Dismissible to remove it
-                      }
-                    },
-
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: _notificationCard(
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          title: Text(
-                            title,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          subtitle: Text(
-                            subtitle,
-                            style: const TextStyle(color: Colors.white70),
-                          ),
-                          trailing:
-                              (type == 'household_invite' &&
-                                  status == 'pending')
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () => respondToInvite(
-                                        id,
-                                        'accepted',
-                                        householdId,
-                                        email,
-                                        fromEmail,
-                                        householdName,
-                                      ),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.greenAccent,
-                                      ),
-                                      child: const Text("Accept"),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => respondToInvite(
-                                        id,
-                                        'rejected',
-                                        householdId,
-                                        email,
-                                        fromEmail,
-                                        householdName,
-                                      ),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.redAccent,
-                                      ),
-                                      child: const Text("Reject"),
-                                    ),
-                                  ],
-                                )
-                              : null,
+                  return _notificationCard(
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      title: Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
+                      subtitle: Text(
+                        subtitle,
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      trailing:
+                          (type == 'household_invite' && status == 'pending')
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextButton(
+                                  onPressed: () => respondToInvite(
+                                    id,
+                                    'accepted',
+                                    householdId,
+                                    email,
+                                    fromEmail,
+                                    householdName,
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.greenAccent,
+                                  ),
+                                  child: const Text("Accept"),
+                                ),
+                                TextButton(
+                                  onPressed: () => respondToInvite(
+                                    id,
+                                    'rejected',
+                                    householdId,
+                                    email,
+                                    fromEmail,
+                                    householdName,
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.redAccent,
+                                  ),
+                                  child: const Text("Reject"),
+                                ),
+                              ],
+                            )
+                          : null,
                     ),
                   );
                 },
