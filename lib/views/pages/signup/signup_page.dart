@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; // For Date
 import 'package:smart_horizon_home/views/pages/create_account_page/create_account.dart';
-import 'package:smart_horizon_home/views/pages/login/login_page.dart';
 
 // ===== Districts for each state =====
 final Map<String, List<String>> districtsByState = {
@@ -251,15 +250,17 @@ class _SignUpPageState extends State<SignUpPage> {
     if (value.length < 8) return 'Name must be at least 8 characters';
     if (value.length > 40) return 'Name must be less than 40 characters';
     final validName = RegExp(r'^[a-zA-Z\s]+$');
-    if (!validName.hasMatch(value))
+    if (!validName.hasMatch(value)) {
       return 'Name can only contain letters and spaces';
+    }
     return null;
   }
 
   String? _validatePhone(String? value) {
     if (value == null || value.isEmpty) return 'Please enter your phone number';
-    if (!RegExp(r'^\d+$').hasMatch(value))
+    if (!RegExp(r'^\d+$').hasMatch(value)) {
       return 'Phone number can only contain digits';
+    }
     return null;
   }
 
@@ -278,8 +279,9 @@ class _SignUpPageState extends State<SignUpPage> {
 
   String? _validatePostalCode(String? value) {
     if (value == null || value.isEmpty) return 'Please enter your postal code';
-    if (!RegExp(r'^\d{3,10}$').hasMatch(value))
+    if (!RegExp(r'^\d{3,10}$').hasMatch(value)) {
       return 'Enter a valid postal code';
+    }
     return null;
   }
 
@@ -300,8 +302,9 @@ class _SignUpPageState extends State<SignUpPage> {
 
   String? _validateDOB(DateTime? value) {
     if (value == null) return 'Please select your date of birth';
-    if (value.isAfter(DateTime.now()))
+    if (value.isAfter(DateTime.now())) {
       return 'Date of birth cannot be in the future';
+    }
     return null;
   }
 
@@ -559,7 +562,7 @@ class _SignUpPageState extends State<SignUpPage> {
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                       ),
-                      value: selectedState,
+                      initialValue: selectedState,
                       items: malaysianStates
                           .map(
                             (s) => DropdownMenuItem(value: s, child: Text(s)),
@@ -583,7 +586,7 @@ class _SignUpPageState extends State<SignUpPage> {
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                       ),
-                      value: selectedDistrict,
+                      initialValue: selectedDistrict,
                       items:
                           (selectedState == null
                                   ? <String>[]

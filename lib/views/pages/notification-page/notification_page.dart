@@ -14,17 +14,18 @@ class NotificationPage extends StatelessWidget {
     String inviterEmail,
     String householdName,
   ) async {
-    final notificationRef = FirebaseFirestore.instance
-        .collection('notifications')
-        .doc(notificationId);
-
-    // update invite status
-    await notificationRef.update({'status': status});
-
     final firestore = FirebaseFirestore.instance;
 
+    // ✅ Update invite status in the *user’s* notification subcollection
+    await firestore
+        .collection('users')
+        .doc(userEmail)
+        .collection('notifications')
+        .doc(notificationId)
+        .update({'status': status});
+
     if (status == 'accepted') {
-      // add user to household members collection under inviter (optional structure)
+      // ✅ Add invited user to inviter's household members
       await firestore
           .collection('users')
           .doc(inviterEmail)
@@ -32,31 +33,38 @@ class NotificationPage extends StatelessWidget {
           .doc(userEmail)
           .set({'email': userEmail, 'joinedAt': FieldValue.serverTimestamp()});
 
-      // update invited user's profile with householdId
+      // ✅ Update invited user's profile with householdId
       await firestore.collection('users').doc(userEmail).update({
         'householdId': householdId,
       });
 
-      // notify inviter about acceptance
-      await firestore.collection('notifications').add({
-        'toEmail': inviterEmail,
-        'fromEmail': userEmail,
-        'householdId': householdId,
-        'householdName': householdName,
-        'type': 'household_response',
-        'status': 'accepted',
-        'sentAt': FieldValue.serverTimestamp(),
-      });
+      // ✅ Notify inviter user that invite was accepted
+      await firestore
+          .collection('users')
+          .doc(inviterEmail)
+          .collection('notifications')
+          .add({
+            'fromEmail': userEmail,
+            'householdId': householdId,
+            'householdName': householdName,
+            'type': 'household_response',
+            'status': 'accepted',
+            'sentAt': FieldValue.serverTimestamp(),
+          });
     } else if (status == 'rejected') {
-      await firestore.collection('notifications').add({
-        'toEmail': inviterEmail,
-        'fromEmail': userEmail,
-        'householdId': householdId,
-        'householdName': householdName,
-        'type': 'household_response',
-        'status': 'rejected',
-        'sentAt': FieldValue.serverTimestamp(),
-      });
+      // ✅ Notify inviter user that invite was rejected
+      await firestore
+          .collection('users')
+          .doc(inviterEmail)
+          .collection('notifications')
+          .add({
+            'fromEmail': userEmail,
+            'householdId': householdId,
+            'householdName': householdName,
+            'type': 'household_response',
+            'status': 'rejected',
+            'sentAt': FieldValue.serverTimestamp(),
+          });
     }
   }
 
@@ -69,33 +77,19 @@ class NotificationPage extends StatelessWidget {
           .get();
       final data = doc.data();
       if (data == null) return "Unknown";
-      // try common name fields
       return (data['username'] ?? data['name'] ?? data['email'] ?? "Unknown")
           as String;
-    } catch (e) {
+    } catch (_) {
       return "Unknown";
     }
   }
 
-  DateTime? _getSentAt(Map<String, dynamic> data, DocumentSnapshot doc) {
-    // Accept sentAt, timestamp, createdAt, or use documentCreateTime fallback
-    if (data['sentAt'] is Timestamp) {
-      return (data['sentAt'] as Timestamp).toDate();
-    }
-    if (data['timestamp'] is Timestamp) {
-      return (data['timestamp'] as Timestamp).toDate();
-    }
-    if (data['createdAt'] is Timestamp) {
-      return (data['createdAt'] as Timestamp).toDate();
-    }
-    return null;
-  }
 
-  // Card widget to match settings page style
   Widget _notificationCard({required Widget child}) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF111827), // Matches settings page card color
+        color: const Color(0xFF111827),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.grey.shade800),
         boxShadow: [
@@ -110,21 +104,9 @@ class NotificationPage extends StatelessWidget {
     );
   }
 
-  // Determine notification type based on available fields
   String _determineNotificationType(Map<String, dynamic> data) {
-    final type = data['type'] as String?;
-    if (type != null && type.isNotEmpty) {
-      return type;
-    }
-
-    // Auto-detect type based on field presence
-    final householdId = data['householdId'] as String?;
-    final status = data['status'] as String?;
-
-    if (householdId != null && householdId.isNotEmpty && status == 'pending') {
-      return 'household_invite';
-    }
-
+    final type = data['type'];
+    if (type != null && type.toString().isNotEmpty) return type;
     return 'unknown';
   }
 
@@ -142,17 +124,21 @@ class NotificationPage extends StatelessWidget {
           style: TextStyle(color: Colors.white),
         ),
       ),
+
+      // ✅ NOW LISTEN FROM USER’S SUBCOLLECTION
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(email)
             .collection('notifications')
-            .where('toEmail', isEqualTo: email)
+            .orderBy('sentAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
               child: Text(
                 "Error: ${snapshot.error}",
-                style: const TextStyle(color: Colors.white70),
+                style: TextStyle(color: Colors.white70),
               ),
             );
           }
@@ -164,7 +150,6 @@ class NotificationPage extends StatelessWidget {
           }
 
           final docs = snapshot.data?.docs ?? [];
-
           if (docs.isEmpty) {
             return const Center(
               child: Text(
@@ -174,48 +159,26 @@ class NotificationPage extends StatelessWidget {
             );
           }
 
-          // Convert docs to list of maps + keep original doc for id
-          final list = docs.map((d) {
-            final m = Map<String, dynamic>.from(
-              d.data() as Map<String, dynamic>,
-            );
-            m['_id'] = d.id;
-            m['_doc'] = d;
-            m['_sentAt'] = _getSentAt(m, d);
-            return m;
-          }).toList();
-
-          // Sort descending by sentAt if present, otherwise keep order received
-          list.sort((a, b) {
-            final da = a['_sentAt'] as DateTime?;
-            final db = b['_sentAt'] as DateTime?;
-            if (da == null && db == null) return 0;
-            if (da == null) return 1;
-            if (db == null) return -1;
-            return db.compareTo(da);
-          });
-
           return ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-            itemCount: list.length,
+            itemCount: docs.length,
             itemBuilder: (context, index) {
-              final item = list[index];
-              final id = item['_id'] as String;
-              final data = Map<String, dynamic>.from(item);
+              final doc = docs[index];
+              final data = doc.data() as Map<String, dynamic>;
+              final id = doc.id;
 
               final type = _determineNotificationType(data);
-              final status = (data['status'] as String?) ?? 'pending';
-              final fromEmail = (data['fromEmail'] as String?) ?? '';
-              final householdId = (data['householdId'] as String?) ?? '';
-              final householdName = (data['householdName'] as String?) ?? '';
+              final status = data['status'] ?? 'pending';
+              final fromEmail = data['fromEmail'] ?? '';
+              final householdId = data['householdId'] ?? '';
+              final householdName = data['householdName'] ?? '';
 
               return FutureBuilder<String>(
                 future: _getUserDisplayName(fromEmail),
-                builder: (context, nameSnap) {
-                  final inviter = nameSnap.data ?? "Someone";
+                builder: (context, snap) {
+                  final inviter = snap.data ?? "Someone";
 
-                  String title;
-                  String subtitle;
+                  String title, subtitle;
                   switch (type) {
                     case 'household_invite':
                       title = "Household Invitation";
@@ -225,27 +188,13 @@ class NotificationPage extends StatelessWidget {
                       title = "Invite Response";
                       subtitle = "$inviter has $status your invitation.";
                       break;
-                    case 'vote_started':
-                      title = "Vote started";
-                      subtitle = "A vote has begun to choose a new admin.";
-                      break;
-                    case 'vote_result':
-                      title = "Vote result";
-                      subtitle = "$inviter is now the admin.";
-                      break;
                     default:
                       title = "Notification";
-                      subtitle =
-                          data['message']?.toString() ??
-                          "You have a new notification.";
+                      subtitle = "You have a new notification.";
                   }
 
                   return _notificationCard(
                     child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
                       title: Text(
                         title,
                         style: const TextStyle(
@@ -257,6 +206,8 @@ class NotificationPage extends StatelessWidget {
                         subtitle,
                         style: const TextStyle(color: Colors.white70),
                       ),
+
+                      // ✅ Accept/Reject buttons still work as before
                       trailing:
                           (type == 'household_invite' && status == 'pending')
                           ? Row(

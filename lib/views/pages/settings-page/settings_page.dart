@@ -58,7 +58,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     // Use email as the document id in the users collection
-    currentEmail = user.email;
+    currentEmail = user.email; // Current user's email
     if (currentEmail == null) {
       setState(() => isLoading = false);
       return;
@@ -218,6 +218,8 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // Create household functions
+  
   Future<void> _createHousehold(String name) async {
     if (currentEmail == null) return;
     setState(() => isLoading = true);
@@ -312,15 +314,17 @@ class _SettingsPageState extends State<SettingsPage> {
           .get();
       if (query.docs.isEmpty) {
         // If user doesn't exist, create notification with email reference
-        await _fire.collection('notifications').add({
-          'fromEmail': currentEmail,
-          'toEmail': email,
-          'householdId': householdId,
-          'householdName': householdName,
-          'type': 'household_invite',
-          'status': 'pending',
-          'sentAt': FieldValue.serverTimestamp(),
-        });
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(email)
+            .collection('notifications')
+            .add({
+              'fromEmail': currentEmail,
+              'type': 'household_invite',
+              'status': 'pending',
+              'sentAt': FieldValue.serverTimestamp(),
+            });
+
         _inviteEmailCtrl.clear();
         _showInfo("Invite created (user not registered yet).");
         return;
@@ -334,11 +338,12 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
 
-      // check existing notification
+      // check if user already invited (does not accept or reject yet)
       final existing = await _fire
+          .collection('users')
+          .doc(email)
           .collection('notifications')
-          .where('toEmail', isEqualTo: toEmail)
-          .where('householdId', isEqualTo: householdId)
+          .where('fromEmail', isEqualTo: currentEmail)
           .where('status', isEqualTo: 'pending')
           .limit(1)
           .get();
@@ -347,11 +352,9 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
 
-      await _fire.collection('notifications').add({
+      // Add invitation if don't have pending invitation
+      await _fire.collection('users').doc(email).collection('notifications').add({
         'fromEmail': currentEmail,
-        'toEmail': toEmail,
-        'householdId': householdId,
-        'householdName': householdName,
         'type': 'household_invite',
         'status': 'pending',
         'sentAt': FieldValue.serverTimestamp(),
@@ -1082,8 +1085,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Icon(Icons.send, color: Colors.white,),
-                      label: const Text("Send", style: TextStyle(color: Colors.white),),
+                          : const Icon(Icons.send, color: Colors.white),
+                      label: const Text(
+                        "Send",
+                        style: TextStyle(color: Colors.white),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue.shade600,
                         padding: const EdgeInsets.symmetric(
@@ -1185,7 +1191,10 @@ class _SettingsPageState extends State<SettingsPage> {
                                   _transferOwnership(selected);
                                 }
                               },
-                              child: const Text("Transfer Owner", style: TextStyle(color: Color(0xFF111827)),),
+                              child: const Text(
+                                "Transfer Owner",
+                                style: TextStyle(color: Color(0xFF111827)),
+                              ),
                             )
                           else
                             Container(
@@ -1285,8 +1294,14 @@ class _SettingsPageState extends State<SettingsPage> {
                             Center(
                               child: ElevatedButton.icon(
                                 onPressed: _createHouseholdDialog,
-                                icon: const Icon(Icons.add_home_work, color: Colors.white,),
-                                label: const Text("Create Household", style: TextStyle(color: Colors.white),),
+                                icon: const Icon(
+                                  Icons.add_home_work,
+                                  color: Colors.white,
+                                ),
+                                label: const Text(
+                                  "Create Household",
+                                  style: TextStyle(color: Colors.white),
+                                ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blue.shade600,
                                   padding: const EdgeInsets.symmetric(
@@ -1312,10 +1327,21 @@ class _SettingsPageState extends State<SettingsPage> {
                             // Leave household button
                             ElevatedButton.icon(
                               onPressed: _leaveHousehold,
-                              icon: const Icon(Icons.logout, color: Colors.white,),
-                              label: const Text("Leave Household", style: TextStyle(color: Colors.white),),
+                              icon: const Icon(
+                                Icons.logout,
+                                color: Colors.white,
+                              ),
+                              label: const Text(
+                                "Leave Household",
+                                style: TextStyle(color: Colors.white),
+                              ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color.fromARGB(255, 199, 58, 58),
+                                backgroundColor: const Color.fromARGB(
+                                  255,
+                                  199,
+                                  58,
+                                  58,
+                                ),
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 14,
                                   horizontal: 18,

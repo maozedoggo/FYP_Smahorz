@@ -186,13 +186,11 @@ class _HouseholdManagerState extends State<HouseholdManager> {
               }
 
               // Create a notification for invitation
-              await _firestore.collection('notifications').add({
-                'toEmail': email,
+              await _firestore.collection('users').doc(email).collection('notifications').add({
                 'fromEmail': _auth.currentUser!.email,
-                'householdId': _householdId,
                 'type': 'household_invite',
                 'status': 'pending',
-                'timestamp': FieldValue.serverTimestamp(),
+                'sentAt': FieldValue.serverTimestamp(),
               });
 
               if (context.mounted) {

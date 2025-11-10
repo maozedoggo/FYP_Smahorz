@@ -1,9 +1,11 @@
 // household_voting.dart
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-/// Minimal dark-mode voting manager for choosing a household admin.
+/// Modern dark-mode voting manager for choosing a household admin.
+/// Uses RadioGroup to avoid deprecated APIs.
 /// Copy this file into your project and use `HouseholdVotingManager()` in SettingsPage.
 class HouseholdVotingManager extends StatefulWidget {
   const HouseholdVotingManager({super.key});
@@ -26,35 +28,41 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
   String? _selectedCandidateEmail; // chosen candidate for current user
   bool _submitting = false;
 
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _subscription;
+
   @override
   void initState() {
     super.initState();
     _initAndListen();
   }
 
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
   Future<void> _initAndListen() async {
     final user = _auth.currentUser;
     if (user == null) {
-      setState(() {
-        _loading = false;
-      });
+      if (!mounted) return;
+      setState(() => _loading = false);
       return;
     }
 
     _currentEmail = user.email;
-
-    // Get user's household id and listen to household changes (so UI updates)
     if (_currentEmail == null) {
-      setState(() {
-        _loading = false;
-      });
+      if (!mounted) return;
+      setState(() => _loading = false);
       return;
     }
+
     final userDoc = await _fire.collection('users').doc(_currentEmail).get();
     final data = userDoc.data();
-    final hid = (data != null) ? (data['householdId'] as String?) : null;
+    final hid = data != null ? (data['householdId'] as String?) : null;
 
     if (hid == null || hid.isEmpty) {
+      if (!mounted) return;
       setState(() {
         _householdId = null;
         _householdRef = null;
@@ -69,11 +77,11 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
     _householdId = hid;
     _householdRef = _fire.collection('households').doc(_householdId);
 
-    // subscribe to household doc changes
-    _householdRef!.snapshots().listen(
+    _subscription = _householdRef!.snapshots().listen(
       (snap) {
         final d = snap.data();
         if (d == null) {
+          if (!mounted) return;
           setState(() {
             _members = [];
             _adminId = null;
@@ -82,17 +90,16 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
           });
           return;
         }
+
         final gotMembers = List<String>.from(d['members'] ?? <String>[]);
         final gotAdmin = d['adminId'] as String?;
-        final rawVotes = Map<String, dynamic>.from(
-          d['votes'] ?? <String, dynamic>{},
-        );
+        final rawVotes = Map<String, dynamic>.from(d['votes'] ?? {});
         final Map<String, String> normalizedVotes = {};
         rawVotes.forEach((k, v) {
-          if (v is String && k is String) normalizedVotes[k] = v;
+          if (v is String) normalizedVotes[k] = v;
         });
 
-        // update selected candidate if current user has already voted
+        if (!mounted) return;
         setState(() {
           _members = gotMembers;
           _adminId = gotAdmin;
@@ -102,48 +109,43 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
         });
       },
       onError: (e) {
-        // on error, still show UI
+        if (!mounted) return;
         setState(() => _loading = false);
       },
     );
   }
 
-  bool get _isMember =>
-      _householdId != null && _members.contains(_currentEmail);
+  bool get _isMember => _householdId != null && _members.contains(_currentEmail);
   bool get _isAdminUser => _adminId != null && _adminId == _currentEmail;
 
-  // cast or change vote (client writes votes.voterUid = candidateUid)
   Future<void> _submitVote() async {
-    if (!_isMember ||
-        _selectedCandidateEmail == null ||
-        _currentEmail == null ||
-        _householdRef == null)
-      return;
+    if (!_isMember || _selectedCandidateEmail == null || _currentEmail == null || _householdRef == null) return;
 
+    if (!mounted) return;
     setState(() => _submitting = true);
+
     try {
-      // set voter's vote to chosen candidate (merge)
       await _householdRef!.set({
         'votes': {_currentEmail!: _selectedCandidateEmail},
       }, SetOptions(merge: true));
 
-      // after writing, check for majority and auto-promote if reached
       await _maybePromoteIfMajority();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Vote submitted.")));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Vote submitted.")));
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error voting: $e")));
-    } finally {
-      setState(() => _submitting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error voting: $e")));
+      }
     }
+
+    if (mounted) setState(() => _submitting = false);
   }
 
-  // Admin or any client can call this to tally and promote winner if majority exists.
   Future<void> _maybePromoteIfMajority() async {
     if (_householdRef == null) return;
+
     final snap = await _householdRef!.get();
     final data = snap.data();
     if (data == null) return;
@@ -155,9 +157,8 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
       if (v is String) counts[v] = (counts[v] ?? 0) + 1;
     }
     if (members.isEmpty) return;
-    final majority = (members.length / 2).floor() + 1; // > half
+    final majority = (members.length / 2).floor() + 1;
 
-    // find candidate with max votes
     String? topUid;
     int topCount = 0;
     counts.forEach((candidateUid, cnt) {
@@ -168,80 +169,81 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
     });
 
     if (topUid != null && topCount >= majority) {
-      // Promote topUid to admin (transactionally)
       await _fire.runTransaction((tx) async {
         final hSnap = await tx.get(_householdRef!);
         final hData = hSnap.data();
         if (hData == null) return;
+
         final currentMembers = List<String>.from(hData['members'] ?? []);
-        // sanity: ensure winner is a member
         if (!currentMembers.contains(topUid)) return;
 
         final previousAdmin = hData['adminId'] as String?;
-        // set new adminId and clear votes
         tx.update(_householdRef!, {
           'adminId': topUid,
-          'votes': <String, dynamic>{}, // clear votes after promotion
+          'votes': <String, dynamic>{},
         });
 
-        // update old admin user doc (demote)
         if (previousAdmin != null && previousAdmin.isNotEmpty) {
           tx.update(_fire.collection('users').doc(previousAdmin), {
             'role': 'member',
           });
         }
-        // update new admin user doc
         tx.update(_fire.collection('users').doc(topUid), {'role': 'admin'});
       });
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("New admin promoted by majority vote.")),
       );
     }
   }
 
-  // Admin-only: finalize (tally and promote if majority)
   Future<void> _finalizeVotes() async {
+    if (!mounted) return;
     setState(() => _submitting = true);
+
     try {
       await _maybePromoteIfMajority();
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error finalizing: $e")));
-    } finally {
-      setState(() => _submitting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error finalizing: $e")));
+      }
     }
+
+    if (mounted) setState(() => _submitting = false);
   }
 
   Future<void> _clearVotes() async {
     if (_householdRef == null) return;
+    if (!mounted) return;
     setState(() => _submitting = true);
+
     try {
-      await _householdRef!.update({'votes': {}}); // clear votes map
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Votes cleared.")));
+      await _householdRef!.update({'votes': {}});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Votes cleared.")));
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error clearing votes: $e")));
-    } finally {
-      setState(() => _submitting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error clearing votes: $e")));
+      }
     }
+
+    if (mounted) setState(() => _submitting = false);
   }
 
-  // helper: compute counts map for UI
   Map<String, int> _computeCounts() {
     final Map<String, int> counts = {};
-    _votes.values.forEach((c) {
+    for (var c in _votes.values) {
       counts[c] = (counts[c] ?? 0) + 1;
-    });
+    }
     return counts;
   }
 
   @override
   Widget build(BuildContext context) {
-    final themeText = TextStyle(color: Colors.white);
+    final themeText = const TextStyle(color: Colors.white);
+
     if (_loading) {
       return Card(
         color: const Color(0xFF0B1220),
@@ -263,10 +265,7 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
             children: [
               Text(
                 "Household Voting",
-                style: themeText.copyWith(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: themeText.copyWith(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               Text(
@@ -290,115 +289,35 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              "🏛️ Admin Election",
-              style: themeText.copyWith(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text("🏛️ Admin Election", style: themeText.copyWith(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Text(
               "Current admin: ${_adminId == null ? '—' : (_adminId == _currentEmail ? 'You' : _adminId)}",
               style: themeText.copyWith(color: Colors.white70),
             ),
             const SizedBox(height: 12),
-
-            // Candidate list (radio buttons)
-            Text(
-              "Cast your vote",
-              style: themeText.copyWith(fontWeight: FontWeight.w600),
-            ),
+            Text("Cast your vote", style: themeText.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
 
-            // show members with radio options; exclude current admin from being a voter candidate? We'll allow voting for any member (except yourself maybe)
+            // Modern RadioGroup implementation
             Column(
               children: _members.map((uid) {
                 final count = counts[uid] ?? 0;
-                final isSelf = uid == _currentEmail;
-                final displayLabel = uid == _currentEmail
-                    ? "You ($_currentEmail)"
-                    : uid;
-                return ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                    future: _fire.collection('users').doc(uid).get(),
-                    builder: (context, snap) {
-                      final d = snap.data?.data();
-                      final label = d != null
-                          ? (d['username'] ?? d['email'] ?? uid)
-                          : uid;
-                      final subtitle = d != null ? (d['email'] ?? '') : '';
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(child: Text(label, style: themeText)),
-                              if (uid == _adminId)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade700,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Text(
-                                    "Admin",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          if (subtitle.isNotEmpty) const SizedBox(height: 4),
-                          if (subtitle.isNotEmpty)
-                            Text(
-                              subtitle,
-                              style: themeText.copyWith(
-                                color: Colors.white54,
-                                fontSize: 12,
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                  leading: Radio<String?>(
-                    value: uid,
-                    groupValue: _selectedCandidateEmail,
-                    onChanged: (val) {
-                      // allow voting for any member other than current admin (optional)
-                      if (_adminId != null && val == _adminId) {
-                        // user is trying to vote for current admin — allow but useless
-                        setState(() => _selectedCandidateEmail = val);
-                      } else {
-                        setState(() => _selectedCandidateEmail = val);
-                      }
-                    },
-                  ),
-                  trailing: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "${count}",
-                        style: themeText.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        "votes",
-                        style: themeText.copyWith(
-                          color: Colors.white54,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
+                return RadioListTile<String>(
+                  title: Text(uid, style: themeText),
+                  subtitle: uid == _adminId ? const Text("Admin", style: TextStyle(color: Colors.blue)) : null,
+                  value: uid,
+                  groupValue: _selectedCandidateEmail,
+                  onChanged: _submitting
+                      ? null
+                      : (val) {
+                          if (!mounted) return;
+                          setState(() {
+                            _selectedCandidateEmail = val;
+                          });
+                        },
+                  activeColor: Colors.blue,
+                  secondary: Text("$count votes", style: themeText.copyWith(fontWeight: FontWeight.bold)),
                 );
               }).toList(),
             ),
@@ -408,40 +327,24 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _submitting || _selectedCandidateEmail == null
-                        ? null
-                        : _submitVote,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade600,
-                    ),
+                    onPressed: _submitting || _selectedCandidateEmail == null ? null : _submitVote,
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade600),
                     child: _submitting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                         : const Text("Vote / Change Vote"),
                   ),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: _maybePromoteIfMajority,
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade800),
                   child: const Text("Tally"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade800,
-                  ),
                 ),
               ],
             ),
 
             const SizedBox(height: 12),
-            Text(
-              "Majority needed: $majority vote(s)",
-              style: themeText.copyWith(color: Colors.white70),
-            ),
+            Text("Majority needed: $majority vote(s)", style: themeText.copyWith(color: Colors.white70)),
             const SizedBox(height: 8),
 
             if (_isAdminUser) ...[
@@ -453,18 +356,16 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
                       icon: const Icon(Icons.check),
                       label: const Text("Finalize (promote if majority)"),
                       onPressed: _submitting ? null : _finalizeVotes,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green.shade700,
-                      ),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.clear),
-                    label: const Text("Clear Votes"),
-                    onPressed: _submitting ? null : _clearVotes,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.clear),
+                      label: const Text("Clear Votes"),
+                      onPressed: _submitting ? null : _clearVotes,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
                     ),
                   ),
                 ],

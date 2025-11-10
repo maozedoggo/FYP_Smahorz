@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_advanced_drawer/flutter_advanced_drawer.dart';
 import 'package:smart_horizon_home/ui/view_devices.dart';
 
-
 import 'package:smart_horizon_home/services/weather_services.dart';
 import 'package:smart_horizon_home/views/pages/notification-page/notification_page.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/clothe_hanger.dart';
@@ -72,10 +71,13 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _signout() async {
     await FirebaseAuth.instance.signOut();
+
     if (!mounted) return;
-    Navigator.pushReplacement(
+
+    Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => LoginPage()),
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false, // This removes all previous routes
     );
   }
 
@@ -126,9 +128,7 @@ class _HomePageState extends State<HomePage> {
                             drawerController.hideDrawer();
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (_) => ProfilePage(),
-                              ),
+                              MaterialPageRoute(builder: (_) => ProfilePage()),
                             );
                           },
                           leading: const Icon(Icons.account_circle_rounded),
@@ -139,9 +139,7 @@ class _HomePageState extends State<HomePage> {
                             drawerController.hideDrawer();
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (_) => SettingsPage(),
-                              ),
+                              MaterialPageRoute(builder: (_) => SettingsPage()),
                             );
                           },
                           leading: const Icon(Icons.settings),
@@ -255,7 +253,9 @@ class _HomePageState extends State<HomePage> {
 
                   // Welcome text
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: horizontalPadding,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -301,7 +301,8 @@ class _HomePageState extends State<HomePage> {
                                 );
                               }
                               final data =
-                                  snapshot.data!.data() as Map<String, dynamic>?;
+                                  snapshot.data!.data()
+                                      as Map<String, dynamic>?;
                               return Text(
                                 data?['username'] ?? "",
                                 style: TextStyle(
@@ -340,7 +341,10 @@ class _HomePageState extends State<HomePage> {
 
                   // Weather container
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: horizontalPadding,
+                      vertical: verticalPadding,
+                    ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(screenWidth * 0.05),
                       child: BackdropFilter(
@@ -348,14 +352,21 @@ class _HomePageState extends State<HomePage> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: const Color.fromRGBO(255, 255, 255, 0.2),
-                            borderRadius: BorderRadius.circular(screenWidth * 0.05),
+                            borderRadius: BorderRadius.circular(
+                              screenWidth * 0.05,
+                            ),
                             border: Border.all(
                               color: const Color.fromRGBO(255, 255, 255, 0.2),
                               width: 1,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color.fromRGBO(255, 255, 255, 0.25),
+                                color: const Color.fromRGBO(
+                                  255,
+                                  255,
+                                  255,
+                                  0.25,
+                                ),
                                 blurRadius: 12,
                                 offset: const Offset(0, 6),
                               ),
