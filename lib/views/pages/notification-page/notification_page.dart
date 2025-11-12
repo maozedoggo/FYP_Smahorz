@@ -84,7 +84,6 @@ class NotificationPage extends StatelessWidget {
     }
   }
 
-
   Widget _notificationCard({required Widget child}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -117,15 +116,19 @@ class NotificationPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFF0B1220),
       appBar: AppBar(
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+        ),
         backgroundColor: const Color(0xFF07101A),
         centerTitle: true,
         title: const Text(
           "Notifications",
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
 
-      // ✅ NOW LISTEN FROM USER’S SUBCOLLECTION
+      // NOW LISTEN FROM USER’S SUBCOLLECTION
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')
