@@ -29,6 +29,7 @@ class _HomePageState extends State<HomePage> {
   String _stateName = "State";
 
   final List<List<dynamic>> smartDevices = [
+    // legacy placeholder; kept for reference but not used when devices are loaded
     ["Parcel Box", "Outside", "lib/icons/door-open.png", true],
     ["Parcel Box", "Inside", "lib/icons/door-open.png", true],
     ["Cloth Hanger", "", "lib/icons/drying-rack.png", true],
@@ -38,11 +39,205 @@ class _HomePageState extends State<HomePage> {
     ParcelBack(),
     ClotheHanger(),
   ];
+  // dynamic device list loaded from Firestore (devices assigned to the user)
+  List<Map<String, dynamic>> _devices = [];
 
   @override
   void initState() {
     super.initState();
     _loadWeather();
+    _loadUserDevices();
+  }
+
+  Future<void> _loadUserDevices() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.email)
+          .get();
+
+      if (!userDoc.exists) return;
+      final userData = userDoc.data() ?? {};
+      final householdId = userData['householdId'];
+      if (householdId == null || householdId.toString().isEmpty) {
+        debugPrint("User has no householdId.");
+        return;
+      }
+
+      // Fetch the household document
+      final householdDoc = await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .get();
+
+      if (!householdDoc.exists) return;
+      final householdData = householdDoc.data() ?? {};
+      final deviceIds = List<String>.from(
+        householdData['devices'] ?? <String>[],
+      );
+
+      // Fetch each device by ID
+      final List<Map<String, dynamic>> loaded = [];
+      for (final id in deviceIds) {
+        final d = await FirebaseFirestore.instance
+            .collection('devices')
+            .doc(id)
+            .get();
+        if (!d.exists) continue;
+        final dd = d.data() ?? {};
+        loaded.add({
+          'id': id,
+          'name': dd['name'] ?? id,
+          'type': dd['type'] ?? 'Unknown',
+          'status': dd['status'] ?? true,
+        });
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _devices = loaded;
+      });
+    } catch (e) {
+      debugPrint("Error loading household devices: $e");
+    }
+  }
+
+  // Show dialog to add device by ID; fetches from 'devices' collection and records
+  Future<void> _showAddDeviceDialog() async {
+    final inHousehold = await _isUserInHousehold();
+
+    if (!inHousehold) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'You must be part of a household before adding a device.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final controller = TextEditingController();
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Insert Your Device ID'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Device ID'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final id = controller.text.trim();
+              if (id.isEmpty) return;
+              Navigator.pop(context, true);
+              await _addDeviceById(id);
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+
+    if (res == true) {
+      await _loadUserDevices();
+    }
+  }
+
+  Future<bool> _isUserInHousehold() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.email)
+          .get();
+
+      if (!userDoc.exists) return false;
+      final data = userDoc.data() ?? {};
+      final householdId = data['householdId'];
+
+      if (householdId == null || householdId.toString().isEmpty) {
+        return false;
+      }
+
+      // Optionally check that the household exists
+      final householdDoc = await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .get();
+
+      return householdDoc.exists;
+    } catch (e) {
+      debugPrint('Error checking household: $e');
+      return false;
+    }
+  }
+
+  Future<void> _addDeviceById(String id) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      // Verify device exists
+      final deviceDoc = await FirebaseFirestore.instance
+          .collection('devices')
+          .doc(id)
+          .get();
+
+      if (!deviceDoc.exists) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Device not found.')));
+        return;
+      }
+
+      // Get user's household ID
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.email)
+          .get();
+
+      final userData = userDoc.data() ?? {};
+      final householdId = userData['householdId'];
+      if (householdId == null || householdId.toString().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You are not assigned to any household.'),
+          ),
+        );
+        return;
+      }
+
+      // Add device to the household’s device list
+      await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .set({
+            'devices': FieldValue.arrayUnion([id]),
+          }, SetOptions(merge: true));
+
+      // Reload UI
+      await _loadUserDevices();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Device added to household.')),
+      );
+    } catch (e) {
+      debugPrint('Error adding device to household: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error adding device: $e')));
+    }
   }
 
   Future<void> _loadWeather() async {
@@ -63,12 +258,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void powerSwitchChanged(bool value, int index) {
-    setState(() {
-      smartDevices[index][3] = value;
-    });
-  }
-
   Future<void> _signout() async {
     await FirebaseAuth.instance.signOut();
 
@@ -79,6 +268,46 @@ class _HomePageState extends State<HomePage> {
       MaterialPageRoute(builder: (_) => const LoginPage()),
       (route) => false, // This removes all previous routes
     );
+  }
+
+  void powerSwitchChanged(bool value, int index) {
+    setState(() {
+      if (_devices.isNotEmpty) {
+        if (index >= 0 && index < _devices.length) {
+          _devices[index]['status'] = value;
+        }
+      } else {
+        if (index >= 0 && index < smartDevices.length) {
+          smartDevices[index][3] = value;
+        }
+      }
+    });
+  }
+
+  Widget _pageForIndex(int index) {
+    if (_devices.isNotEmpty) {
+      final dev = _devices[index];
+      final type = (dev['type'] ?? '').toString().toLowerCase();
+      final name = (dev['name'] ?? '').toString().toLowerCase();
+      if (type.contains('clothe') || type.contains('hanger'))
+        return const ClotheHanger();
+      if (type.contains('parcel') || name.contains('parcel')) {
+        if (name.contains('inside') || type.contains('inside'))
+          return const ParcelBack();
+        return const ParcelFront();
+      }
+      return const ClotheHanger();
+    } else {
+      final type = (smartDevices[index][0] as String).toLowerCase();
+      final part = (smartDevices[index][1] as String).toLowerCase();
+      if (type.contains('parcel')) {
+        if (part.contains('inside')) return const ParcelBack();
+        return const ParcelFront();
+      }
+      if (type.contains('cloth') || type.contains('hanger'))
+        return const ClotheHanger();
+      return const ParcelFront();
+    }
   }
 
   @override
@@ -238,28 +467,7 @@ class _HomePageState extends State<HomePage> {
                             size: iconSize,
                             color: Colors.white,
                           ),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => AlertDialog(
-                                  title: Text(
-                                    "Insert Your Device ID",
-                                    style: TextStyle(color: Colors.red),
-                                  ),
-                                  content: TextField(
-                                    decoration: InputDecoration(),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () {},
-                                      child: Text("Add"),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
+                          onPressed: _showAddDeviceDialog,
                         ),
                       ],
                     ),
@@ -475,40 +683,70 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
 
-                  // Devices grid
+                  // Devices grid or empty state when no devices added
                   Expanded(
-                    child: GridView.builder(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: horizontalPadding,
-                      ),
-                      itemCount: smartDevices.length,
-                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: screenWidth * 0.5,
-                        childAspectRatio: 0.8,
-                        mainAxisSpacing: screenHeight * 0.02,
-                        crossAxisSpacing: screenWidth * 0.03,
-                      ),
-                      itemBuilder: (context, index) {
-                        return GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => devicePages[index],
-                              ),
-                            );
-                          },
-                          child: ViewDevices(
-                            deviceType: smartDevices[index][0],
-                            devicePart: smartDevices[index][1],
-                            iconPath: smartDevices[index][2],
-                            status: smartDevices[index][3],
-                            onChanged: (value) =>
-                                powerSwitchChanged(value, index),
+                    child: _devices.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.device_hub,
+                                  size: 56,
+                                  color: Colors.white24,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  "No devices added yet",
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                            ),
+                          )
+                        : GridView.builder(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: horizontalPadding,
+                            ),
+                            itemCount: _devices.length,
+                            gridDelegate:
+                                SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: screenWidth * 0.5,
+                                  childAspectRatio: 0.8,
+                                  mainAxisSpacing: screenHeight * 0.02,
+                                  crossAxisSpacing: screenWidth * 0.03,
+                                ),
+                            itemBuilder: (context, index) {
+                              final dev = _devices[index];
+                              final type = (dev['type'] ?? '')
+                                  .toString()
+                                  .toLowerCase();
+                              final iconPath =
+                                  type.contains('clothe') ||
+                                      type.contains('hanger')
+                                  ? 'lib/icons/drying-rack.png'
+                                  : 'lib/icons/door-open.png';
+                              return GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => _pageForIndex(index),
+                                  ),
+                                ),
+                                child: ViewDevices(
+                                  deviceType: dev['type'] ?? '',
+                                  devicePart: dev['name'] ?? '',
+                                  iconPath: iconPath,
+                                  status: dev['status'] ?? true,
+                                  onChanged: (value) =>
+                                      powerSwitchChanged(value, index),
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
-                    ),
                   ),
                 ],
               ),

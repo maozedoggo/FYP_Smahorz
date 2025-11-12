@@ -1333,6 +1333,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             const SizedBox(height: 20),
                             const HouseholdVotingManager(),
 
+                            SizedBox(height: 20),
+
                             // Leave household button
                             ElevatedButton.icon(
                               onPressed: _leaveHousehold,

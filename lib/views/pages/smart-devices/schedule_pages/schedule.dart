@@ -178,8 +178,9 @@ class _SchedulePageState extends State<SchedulePage> {
                         selected: selectedAction == "Turn ON",
                         selectedColor: Colors.blueAccent,
                         onSelected: (bool selected) {
-                          if (selected)
+                          if (selected) {
                             setState(() => selectedAction = "Turn ON");
+                          }
                         },
                       ),
                       const SizedBox(width: 10),
@@ -193,8 +194,9 @@ class _SchedulePageState extends State<SchedulePage> {
                         selected: selectedAction == "Turn OFF",
                         selectedColor: Colors.redAccent,
                         onSelected: (bool selected) {
-                          if (selected)
+                          if (selected) {
                             setState(() => selectedAction = "Turn OFF");
+                          }
                         },
                       ),
                     ],

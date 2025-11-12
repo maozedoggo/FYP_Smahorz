@@ -434,7 +434,7 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey.shade800,
                 ),
-                child: const Text("Tally"),
+                child: const Text("Tally", style: TextStyle(color: Colors.white),),
               ),
             ],
           ),
