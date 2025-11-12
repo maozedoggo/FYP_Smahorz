@@ -59,7 +59,20 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
 
     final userDoc = await _fire.collection('users').doc(_currentEmail).get();
     final data = userDoc.data();
-    final hid = data != null ? (data['householdId'] as String?) : null;
+    String? hid = data != null ? (data['householdId'] as String?) : null;
+
+    // Fallback: if user's doc doesn't have householdId, try to find a household
+    // where this email is listed in members (helps if user doc wasn't updated).
+    if (hid == null || hid.isEmpty) {
+      final q = await _fire
+          .collection('households')
+          .where('members', arrayContains: _currentEmail)
+          .limit(1)
+          .get();
+      if (q.docs.isNotEmpty) {
+        hid = q.docs.first.id;
+      }
+    }
 
     if (hid == null || hid.isEmpty) {
       if (!mounted) return;
@@ -104,7 +117,16 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
           _members = gotMembers;
           _adminId = gotAdmin;
           _votes = normalizedVotes;
-          _selectedCandidateEmail = _votes[_currentEmail];
+          // If user somehow voted for themselves previously, ignore that selection
+          final currentVote = _votes[_currentEmail];
+          if (currentVote != null &&
+              _currentEmail != null &&
+              currentVote.trim().toLowerCase() ==
+                  _currentEmail!.trim().toLowerCase()) {
+            _selectedCandidateEmail = null;
+          } else {
+            _selectedCandidateEmail = currentVote;
+          }
           _loading = false;
         });
       },
@@ -115,9 +137,17 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
     );
   }
 
-  bool get _isMember =>
-      _householdId != null && _members.contains(_currentEmail);
-  bool get _isAdminUser => _adminId != null && _adminId == _currentEmail;
+  bool get _isMember {
+    if (_householdId == null || _currentEmail == null) return false;
+    final norm = _currentEmail!.trim().toLowerCase();
+    return _members.any((m) => m.trim().toLowerCase() == norm);
+  }
+
+  bool get _isAdminUser {
+    if (_adminId == null || _currentEmail == null) return false;
+    return _adminId!.trim().toLowerCase() ==
+        _currentEmail!.trim().toLowerCase();
+  }
 
   Future<void> _submitVote() async {
     if (!_isMember ||
@@ -184,7 +214,11 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
         if (hData == null) return;
 
         final currentMembers = List<String>.from(hData['members'] ?? []);
-        if (!currentMembers.contains(topUid)) return;
+        // membership check should be case-insensitive
+        final containsTop = currentMembers
+            .map((e) => e.trim().toLowerCase())
+            .contains(topUid?.trim().toLowerCase());
+        if (!containsTop) return;
 
         final previousAdmin = hData['adminId'] as String?;
         tx.update(_householdRef!, {
@@ -307,16 +341,29 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
     final counts = _computeCounts();
     final majority = (_members.length / 2).floor() + 1;
 
+    // Build candidate list excluding the current user so you cannot vote for yourself
+    final normalizedCurrent = _currentEmail?.trim().toLowerCase();
+    final candidateList = _members.where((m) {
+      final mm = m.trim().toLowerCase();
+      return normalizedCurrent == null || mm != normalizedCurrent;
+    }).toList();
+
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "Admin Election",
-            style: themeText.copyWith(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            children: [
+              const Icon(Icons.how_to_vote, color: Colors.blueAccent, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                "Admin Election",
+                style: themeText.copyWith(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Text(
@@ -332,7 +379,7 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
 
           // Modern RadioGroup implementation
           Column(
-            children: _members.map((uid) {
+            children: candidateList.map((uid) {
               final count = counts[uid] ?? 0;
               return RadioListTile<String>(
                 title: Text(uid, style: themeText),

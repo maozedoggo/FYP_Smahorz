@@ -78,7 +78,13 @@ class _SettingsPageState extends State<SettingsPage> {
       }
 
       final userData = (await currentUserDocRef!.get()).data() ?? {};
-      householdId = userData['householdId'];
+      // Normalize householdId: treat empty or whitespace-only strings as null
+      final rawHid = userData['householdId'];
+      if (rawHid is String) {
+        householdId = rawHid.trim().isEmpty ? null : rawHid.trim();
+      } else {
+        householdId = null;
+      }
       userRole = userData['role'];
 
       // LOAD USER ADDRESS REGARDLESS OF HOUSEHOLD STATUS
@@ -219,7 +225,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   // Create household functions
-  
+
   Future<void> _createHousehold(String name) async {
     if (currentEmail == null) return;
     setState(() => isLoading = true);
@@ -331,7 +337,6 @@ class _SettingsPageState extends State<SettingsPage> {
       }
 
       final userDoc = query.docs.first;
-      final toEmail = userDoc.id; // doc id is email
       final userData = userDoc.data();
       if ((userData['householdId'] as String?) != null) {
         _showInfo("User already belongs to a household.");
@@ -353,12 +358,16 @@ class _SettingsPageState extends State<SettingsPage> {
       }
 
       // Add invitation if don't have pending invitation
-      await _fire.collection('users').doc(email).collection('notifications').add({
-        'fromEmail': currentEmail,
-        'type': 'household_invite',
-        'status': 'pending',
-        'sentAt': FieldValue.serverTimestamp(),
-      });
+      await _fire
+          .collection('users')
+          .doc(email)
+          .collection('notifications')
+          .add({
+            'fromEmail': currentEmail,
+            'type': 'household_invite',
+            'status': 'pending',
+            'sentAt': FieldValue.serverTimestamp(),
+          });
 
       _inviteEmailCtrl.clear();
       ScaffoldMessenger.of(
