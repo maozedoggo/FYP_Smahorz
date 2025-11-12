@@ -115,11 +115,16 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
     );
   }
 
-  bool get _isMember => _householdId != null && _members.contains(_currentEmail);
+  bool get _isMember =>
+      _householdId != null && _members.contains(_currentEmail);
   bool get _isAdminUser => _adminId != null && _adminId == _currentEmail;
 
   Future<void> _submitVote() async {
-    if (!_isMember || _selectedCandidateEmail == null || _currentEmail == null || _householdRef == null) return;
+    if (!_isMember ||
+        _selectedCandidateEmail == null ||
+        _currentEmail == null ||
+        _householdRef == null)
+      return;
 
     if (!mounted) return;
     setState(() => _submitting = true);
@@ -132,11 +137,15 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
       await _maybePromoteIfMajority();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Vote submitted.")));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Vote submitted.")));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error voting: $e")));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error voting: $e")));
       }
     }
 
@@ -206,7 +215,9 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
       await _maybePromoteIfMajority();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error finalizing: $e")));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error finalizing: $e")));
       }
     }
 
@@ -221,11 +232,15 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
     try {
       await _householdRef!.update({'votes': {}});
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Votes cleared.")));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Votes cleared.")));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error clearing votes: $e")));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error clearing votes: $e")));
       }
     }
 
@@ -240,40 +255,51 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
     return counts;
   }
 
+  // Local card helper to match SettingsPage card styling
+  Widget _card({required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade800),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeText = const TextStyle(color: Colors.white);
 
     if (_loading) {
-      return Card(
-        color: const Color(0xFF0B1220),
-        margin: const EdgeInsets.all(16),
-        child: const Padding(
-          padding: EdgeInsets.all(20.0),
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      );
+      return _card(child: const Center(child: CircularProgressIndicator()));
     }
 
     if (!_isMember) {
-      return Card(
-        color: const Color(0xFF111827),
-        margin: const EdgeInsets.all(16),
-        child: Padding(
-          padding: const EdgeInsets.all(18.0),
-          child: Column(
-            children: [
-              Text(
-                "Household Voting",
-                style: themeText.copyWith(fontSize: 18, fontWeight: FontWeight.bold),
+      return _card(
+        child: Column(
+          children: [
+            Text(
+              "Household Voting",
+              style: themeText.copyWith(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(height: 12),
-              Text(
-                "You are not in a household. Create or join a household to use voting.",
-                style: themeText,
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "You are not in a household. Create or join a household to use voting.",
+              style: themeText,
+            ),
+          ],
         ),
       );
     }
@@ -281,98 +307,127 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
     final counts = _computeCounts();
     final majority = (_members.length / 2).floor() + 1;
 
-    return Card(
-      color: const Color(0xFF111827),
-      margin: const EdgeInsets.all(16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("🏛️ Admin Election", style: themeText.copyWith(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(
-              "Current admin: ${_adminId == null ? '—' : (_adminId == _currentEmail ? 'You' : _adminId)}",
-              style: themeText.copyWith(color: Colors.white70),
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Admin Election",
+            style: themeText.copyWith(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(height: 12),
-            Text("Cast your vote", style: themeText.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Current admin: ${_adminId == null ? '—' : (_adminId == _currentEmail ? 'You' : _adminId)}",
+            style: themeText.copyWith(color: Colors.white70),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Cast your vote",
+            style: themeText.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
 
-            // Modern RadioGroup implementation
-            Column(
-              children: _members.map((uid) {
-                final count = counts[uid] ?? 0;
-                return RadioListTile<String>(
-                  title: Text(uid, style: themeText),
-                  subtitle: uid == _adminId ? const Text("Admin", style: TextStyle(color: Colors.blue)) : null,
-                  value: uid,
-                  groupValue: _selectedCandidateEmail,
-                  onChanged: _submitting
+          // Modern RadioGroup implementation
+          Column(
+            children: _members.map((uid) {
+              final count = counts[uid] ?? 0;
+              return RadioListTile<String>(
+                title: Text(uid, style: themeText),
+                subtitle: uid == _adminId
+                    ? const Text("Admin", style: TextStyle(color: Colors.blue))
+                    : null,
+                value: uid,
+                groupValue: _selectedCandidateEmail,
+                onChanged: _submitting
+                    ? null
+                    : (val) {
+                        if (!mounted) return;
+                        setState(() {
+                          _selectedCandidateEmail = val;
+                        });
+                      },
+                activeColor: Colors.blue,
+                secondary: Text(
+                  "$count votes",
+                  style: themeText.copyWith(fontWeight: FontWeight.bold),
+                ),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _submitting || _selectedCandidateEmail == null
                       ? null
-                      : (val) {
-                          if (!mounted) return;
-                          setState(() {
-                            _selectedCandidateEmail = val;
-                          });
-                        },
-                  activeColor: Colors.blue,
-                  secondary: Text("$count votes", style: themeText.copyWith(fontWeight: FontWeight.bold)),
-                );
-              }).toList(),
-            ),
+                      : _submitVote,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                  ),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text("Vote / Change Vote"),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _maybePromoteIfMajority,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey.shade800,
+                ),
+                child: const Text("Tally"),
+              ),
+            ],
+          ),
 
-            const SizedBox(height: 12),
+          const SizedBox(height: 12),
+          Text(
+            "Majority needed: $majority vote(s)",
+            style: themeText.copyWith(color: Colors.white70),
+          ),
+          const SizedBox(height: 8),
+
+          if (_isAdminUser) ...[
+            const Divider(color: Colors.grey),
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: _submitting || _selectedCandidateEmail == null ? null : _submitVote,
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade600),
-                    child: _submitting
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text("Vote / Change Vote"),
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.check),
+                    label: const Text("Finalize (promote if majority)"),
+                    onPressed: _submitting ? null : _finalizeVotes,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _maybePromoteIfMajority,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade800),
-                  child: const Text("Tally"),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.clear),
+                    label: const Text("Clear Votes"),
+                    onPressed: _submitting ? null : _clearVotes,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                    ),
+                  ),
                 ),
               ],
             ),
-
-            const SizedBox(height: 12),
-            Text("Majority needed: $majority vote(s)", style: themeText.copyWith(color: Colors.white70)),
-            const SizedBox(height: 8),
-
-            if (_isAdminUser) ...[
-              const Divider(color: Colors.grey),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.check),
-                      label: const Text("Finalize (promote if majority)"),
-                      onPressed: _submitting ? null : _finalizeVotes,
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.clear),
-                      label: const Text("Clear Votes"),
-                      onPressed: _submitting ? null : _clearVotes,
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
-                    ),
-                  ),
-                ],
-              ),
-            ],
           ],
-        ),
+        ],
       ),
     );
   }

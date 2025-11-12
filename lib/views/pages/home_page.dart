@@ -242,7 +242,21 @@ class _HomePageState extends State<HomePage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => NotificationPage(),
+                                builder: (context) => AlertDialog(
+                                  title: Text(
+                                    "Insert Your Device ID",
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                  content: TextField(
+                                    decoration: InputDecoration(),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () {},
+                                      child: Text("Add"),
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           },
