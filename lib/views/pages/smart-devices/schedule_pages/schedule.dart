@@ -315,7 +315,7 @@ class _SchedulePageState extends State<SchedulePage> {
               selectedDayPredicate: (day) => isSameDay(today, day),
               calendarStyle: CalendarStyle(
                 todayDecoration: BoxDecoration(
-                  color: Colors.lightBlue[100],
+                  color: Colors.grey[850],
                   shape: BoxShape.circle,
                 ),
                 selectedDecoration: BoxDecoration(

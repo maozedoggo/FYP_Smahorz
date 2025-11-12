@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_advanced_drawer/flutter_advanced_drawer.dart';
 import 'package:smart_horizon_home/ui/view_devices.dart';
-
 import 'package:smart_horizon_home/services/weather_services.dart';
 import 'package:smart_horizon_home/views/pages/notification-page/notification_page.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/clothe_hanger.dart';
@@ -28,19 +27,9 @@ class _HomePageState extends State<HomePage> {
   int _temp = 0;
   String _stateName = "State";
 
-  final List<List<dynamic>> smartDevices = [
-    // legacy placeholder; kept for reference but not used when devices are loaded
-    ["Parcel Box", "Outside", "lib/icons/door-open.png", true],
-    ["Parcel Box", "Inside", "lib/icons/door-open.png", true],
-    ["Cloth Hanger", "", "lib/icons/drying-rack.png", true],
-  ];
-  final List<Widget> devicePages = const [
-    ParcelFront(),
-    ParcelBack(),
-    ClotheHanger(),
-  ];
-  // dynamic device list loaded from Firestore (devices assigned to the user)
+  // Devices
   List<Map<String, dynamic>> _devices = [];
+  final ValueNotifier<Map<String, bool>> _deviceStatus = ValueNotifier({});
 
   @override
   void initState() {
@@ -54,68 +43,81 @@ class _HomePageState extends State<HomePage> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.email)
-          .get();
-
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.email).get();
       if (!userDoc.exists) return;
+
       final userData = userDoc.data() ?? {};
       final householdId = userData['householdId'];
-      if (householdId == null || householdId.toString().isEmpty) {
-        debugPrint("User has no householdId.");
-        return;
-      }
+      if (householdId == null || householdId.toString().isEmpty) return;
 
-      // Fetch the household document
-      final householdDoc = await FirebaseFirestore.instance
-          .collection('households')
-          .doc(householdId)
-          .get();
-
+      final householdDoc = await FirebaseFirestore.instance.collection('households').doc(householdId).get();
       if (!householdDoc.exists) return;
-      final householdData = householdDoc.data() ?? {};
-      final deviceIds = List<String>.from(
-        householdData['devices'] ?? <String>[],
-      );
 
-      // Fetch each device by ID
-      final List<Map<String, dynamic>> loaded = [];
+      final deviceIds = List<String>.from(householdDoc.data()?['devices'] ?? []);
+      final loaded = <Map<String, dynamic>>[];
+      final statusMap = <String, bool>{};
+
       for (final id in deviceIds) {
-        final d = await FirebaseFirestore.instance
-            .collection('devices')
-            .doc(id)
-            .get();
+        final d = await FirebaseFirestore.instance.collection('devices').doc(id).get();
         if (!d.exists) continue;
         final dd = d.data() ?? {};
         loaded.add({
           'id': id,
           'name': dd['name'] ?? id,
           'type': dd['type'] ?? 'Unknown',
-          'status': dd['status'] ?? true,
         });
+        statusMap[id] = dd['status'] ?? true;
       }
 
       if (!mounted) return;
+
       setState(() {
         _devices = loaded;
       });
+      _deviceStatus.value = statusMap;
     } catch (e) {
       debugPrint("Error loading household devices: $e");
     }
   }
 
-  // Show dialog to add device by ID; fetches from 'devices' collection and records
+  Future<void> _addDeviceById(String id) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final deviceDoc = await FirebaseFirestore.instance.collection('devices').doc(id).get();
+      if (!deviceDoc.exists) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device not found.')));
+        return;
+      }
+
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.email).get();
+      final userData = userDoc.data() ?? {};
+      final householdId = userData['householdId'];
+      if (householdId == null || householdId.toString().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You are not assigned to any household.')),
+        );
+        return;
+      }
+
+      await FirebaseFirestore.instance.collection('households').doc(householdId).set({
+        'devices': FieldValue.arrayUnion([id]),
+      }, SetOptions(merge: true));
+
+      await _loadUserDevices();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device added to household.')));
+    } catch (e) {
+      debugPrint('Error adding device: $e');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error adding device: $e')));
+    }
+  }
+
   Future<void> _showAddDeviceDialog() async {
     final inHousehold = await _isUserInHousehold();
-
     if (!inHousehold) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'You must be part of a household before adding a device.',
-          ),
-        ),
+        const SnackBar(content: Text('You must be part of a household before adding a device.')),
       );
       return;
     }
@@ -125,21 +127,15 @@ class _HomePageState extends State<HomePage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Insert Your Device ID'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'Device ID'),
-        ),
+        content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Device ID')),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: () {
               final id = controller.text.trim();
               if (id.isEmpty) return;
               Navigator.pop(context, true);
-              await _addDeviceById(id);
+              _addDeviceById(id);
             },
             child: const Text('Add'),
           ),
@@ -147,9 +143,7 @@ class _HomePageState extends State<HomePage> {
       ),
     );
 
-    if (res == true) {
-      await _loadUserDevices();
-    }
+    if (res == true) await _loadUserDevices();
   }
 
   Future<bool> _isUserInHousehold() async {
@@ -157,25 +151,12 @@ class _HomePageState extends State<HomePage> {
     if (user == null) return false;
 
     try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.email)
-          .get();
-
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.email).get();
       if (!userDoc.exists) return false;
-      final data = userDoc.data() ?? {};
-      final householdId = data['householdId'];
+      final householdId = userDoc.data()?['householdId'];
+      if (householdId == null || householdId.toString().isEmpty) return false;
 
-      if (householdId == null || householdId.toString().isEmpty) {
-        return false;
-      }
-
-      // Optionally check that the household exists
-      final householdDoc = await FirebaseFirestore.instance
-          .collection('households')
-          .doc(householdId)
-          .get();
-
+      final householdDoc = await FirebaseFirestore.instance.collection('households').doc(householdId).get();
       return householdDoc.exists;
     } catch (e) {
       debugPrint('Error checking household: $e');
@@ -183,69 +164,12 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _addDeviceById(String id) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-
-      // Verify device exists
-      final deviceDoc = await FirebaseFirestore.instance
-          .collection('devices')
-          .doc(id)
-          .get();
-
-      if (!deviceDoc.exists) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Device not found.')));
-        return;
-      }
-
-      // Get user's household ID
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.email)
-          .get();
-
-      final userData = userDoc.data() ?? {};
-      final householdId = userData['householdId'];
-      if (householdId == null || householdId.toString().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You are not assigned to any household.'),
-          ),
-        );
-        return;
-      }
-
-      // Add device to the household’s device list
-      await FirebaseFirestore.instance
-          .collection('households')
-          .doc(householdId)
-          .set({
-            'devices': FieldValue.arrayUnion([id]),
-          }, SetOptions(merge: true));
-
-      // Reload UI
-      await _loadUserDevices();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Device added to household.')),
-      );
-    } catch (e) {
-      debugPrint('Error adding device to household: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error adding device: $e')));
-    }
-  }
-
   Future<void> _loadWeather() async {
     try {
       await weatherAPI.fetchData();
       await weatherAPI.callApi();
-
       if (!mounted) return;
+
       setState(() {
         _stateName = weatherAPI.stateName ?? "Unknown";
         _cityName = weatherAPI.cityName ?? "Unknown";
@@ -260,54 +184,28 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _signout() async {
     await FirebaseAuth.instance.signOut();
-
     if (!mounted) return;
-
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false, // This removes all previous routes
+      (route) => false,
     );
   }
 
-  void powerSwitchChanged(bool value, int index) {
-    setState(() {
-      if (_devices.isNotEmpty) {
-        if (index >= 0 && index < _devices.length) {
-          _devices[index]['status'] = value;
-        }
-      } else {
-        if (index >= 0 && index < smartDevices.length) {
-          smartDevices[index][3] = value;
-        }
-      }
-    });
+  void powerSwitchChanged(bool value, String deviceId) {
+    _deviceStatus.value = {..._deviceStatus.value, deviceId: value};
   }
 
-  Widget _pageForIndex(int index) {
-    if (_devices.isNotEmpty) {
-      final dev = _devices[index];
-      final type = (dev['type'] ?? '').toString().toLowerCase();
-      final name = (dev['name'] ?? '').toString().toLowerCase();
-      if (type.contains('clothe') || type.contains('hanger'))
-        return const ClotheHanger();
-      if (type.contains('parcel') || name.contains('parcel')) {
-        if (name.contains('inside') || type.contains('inside'))
-          return const ParcelBack();
-        return const ParcelFront();
-      }
-      return const ClotheHanger();
-    } else {
-      final type = (smartDevices[index][0] as String).toLowerCase();
-      final part = (smartDevices[index][1] as String).toLowerCase();
-      if (type.contains('parcel')) {
-        if (part.contains('inside')) return const ParcelBack();
-        return const ParcelFront();
-      }
-      if (type.contains('cloth') || type.contains('hanger'))
-        return const ClotheHanger();
+  Widget _pageForDevice(Map<String, dynamic> device) {
+    final type = (device['type'] ?? '').toString().toLowerCase();
+    final name = (device['name'] ?? '').toString().toLowerCase();
+
+    if (type.contains('clothe') || type.contains('hanger')) return const ClotheHanger();
+    if (type.contains('parcel') || name.contains('parcel')) {
+      if (name.contains('inside') || type.contains('inside')) return const ParcelBack();
       return const ParcelFront();
     }
+    return const ClotheHanger();
   }
 
   @override
@@ -317,15 +215,14 @@ class _HomePageState extends State<HomePage> {
 
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-
     final horizontalPadding = screenWidth * 0.05;
     final verticalPadding = screenHeight * 0.02;
     final iconSize = screenWidth * 0.08;
     final titleFontSize = screenWidth * 0.08;
     final subtitleFontSize = screenWidth * 0.05;
 
-    return PopScope(
-      canPop: false,
+    return WillPopScope(
+      onWillPop: () async => false,
       child: AdvancedDrawer(
         controller: drawerController,
         openScale: 0.7,
@@ -355,10 +252,7 @@ class _HomePageState extends State<HomePage> {
                         ListTile(
                           onTap: () {
                             drawerController.hideDrawer();
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => ProfilePage()),
-                            );
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage()));
                           },
                           leading: const Icon(Icons.account_circle_rounded),
                           title: const Text('Profile'),
@@ -366,10 +260,7 @@ class _HomePageState extends State<HomePage> {
                         ListTile(
                           onTap: () {
                             drawerController.hideDrawer();
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => SettingsPage()),
-                            );
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsPage()));
                           },
                           leading: const Icon(Icons.settings),
                           title: const Text('Settings'),
@@ -380,29 +271,13 @@ class _HomePageState extends State<HomePage> {
                   Center(
                     child: TextButton.icon(
                       onPressed: _signout,
-                      icon: Icon(
-                        Icons.logout_rounded,
-                        color: Colors.red[700],
-                        size: iconSize,
-                      ),
-                      label: Text(
-                        "Logout",
-                        style: TextStyle(
-                          color: Colors.red[700],
-                          fontSize: subtitleFontSize,
-                        ),
-                      ),
+                      icon: Icon(Icons.logout_rounded, color: Colors.red[700], size: iconSize),
+                      label: Text("Logout", style: TextStyle(color: Colors.red[700], fontSize: subtitleFontSize)),
                     ),
                   ),
                   DefaultTextStyle(
-                    style: TextStyle(
-                      fontSize: screenWidth * 0.03,
-                      color: Colors.white,
-                    ),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 16.0),
-                      child: const Text('Smart Horizon Home'),
-                    ),
+                    style: TextStyle(fontSize: screenWidth * 0.03, color: Colors.white),
+                    child: Container(margin: const EdgeInsets.symmetric(vertical: 16.0), child: const Text('Smart Horizon Home')),
                   ),
                 ],
               ),
@@ -417,11 +292,7 @@ class _HomePageState extends State<HomePage> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF0063A1),
-                  Color(0xFF0982BA),
-                  Color(0xFF04111C),
-                ],
+                colors: [Color(0xFF0063A1), Color(0xFF0982BA), Color(0xFF04111C)],
                 stops: [0.21, 0.41, 1.0],
               ),
             ),
@@ -431,42 +302,22 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   // Top bar
                   Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                      vertical: verticalPadding,
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
                     child: Row(
                       children: [
                         IconButton(
-                          icon: Icon(
-                            Icons.menu,
-                            size: iconSize,
-                            color: Colors.white,
-                          ),
+                          icon: Icon(Icons.menu, size: iconSize, color: Colors.white),
                           onPressed: () => drawerController.toggleDrawer(),
                         ),
                         const Spacer(),
                         IconButton(
-                          icon: Icon(
-                            Icons.notifications,
-                            size: iconSize,
-                            color: Colors.white,
-                          ),
+                          icon: Icon(Icons.notifications, size: iconSize, color: Colors.white),
                           onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => NotificationPage(),
-                              ),
-                            );
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationPage()));
                           },
                         ),
                         IconButton(
-                          icon: Icon(
-                            Icons.add_circle,
-                            size: iconSize,
-                            color: Colors.white,
-                          ),
+                          icon: Icon(Icons.add_circle, size: iconSize, color: Colors.white),
                           onPressed: _showAddDeviceDialog,
                         ),
                       ],
@@ -475,9 +326,7 @@ class _HomePageState extends State<HomePage> {
 
                   // Welcome text
                   Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -487,86 +336,39 @@ class _HomePageState extends State<HomePage> {
                             fontSize: titleFontSize,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
-                            shadows: const [
-                              Shadow(
-                                blurRadius: 4,
-                                color: Colors.black54,
-                                offset: Offset(1, 2),
-                              ),
-                            ],
+                            shadows: const [Shadow(blurRadius: 4, color: Colors.black54, offset: Offset(1, 2))],
                           ),
                         ),
                         if (userEmail != null)
                           StreamBuilder<DocumentSnapshot>(
-                            stream: FirebaseFirestore.instance
-                                .collection("users")
-                                .doc(userEmail)
-                                .snapshots(),
+                            stream: FirebaseFirestore.instance.collection("users").doc(userEmail).snapshots(),
                             builder: (context, snapshot) {
-                              if (snapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return Text(
-                                  "...",
-                                  style: TextStyle(
-                                    fontSize: subtitleFontSize,
-                                    color: Colors.white70,
-                                  ),
-                                );
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return Text("...", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white70));
                               }
                               if (!snapshot.hasData || !snapshot.data!.exists) {
-                                return Text(
-                                  "No username",
-                                  style: TextStyle(
-                                    fontSize: subtitleFontSize,
-                                    color: Colors.white70,
-                                  ),
-                                );
+                                return Text("No username", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white70));
                               }
-                              final data =
-                                  snapshot.data!.data()
-                                      as Map<String, dynamic>?;
+                              final data = snapshot.data!.data() as Map<String, dynamic>?;
                               return Text(
                                 data?['username'] ?? "",
-                                style: TextStyle(
-                                  fontSize: subtitleFontSize,
-                                  color: Colors.white,
-                                  shadows: const [
-                                    Shadow(
-                                      blurRadius: 2,
-                                      color: Colors.black54,
-                                      offset: Offset(0.5, 1),
-                                    ),
-                                  ],
-                                ),
+                                style: TextStyle(fontSize: subtitleFontSize, color: Colors.white, shadows: const [
+                                  Shadow(blurRadius: 2, color: Colors.black54, offset: Offset(0.5, 1)),
+                                ]),
                               );
                             },
                           )
                         else
-                          Text(
-                            "Not logged in",
-                            style: TextStyle(
-                              fontSize: subtitleFontSize,
-                              color: Colors.white70,
-                            ),
-                          ),
+                          Text("Not logged in", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white70)),
                       ],
                     ),
                   ),
 
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                      vertical: 8,
-                    ),
-                    child: Divider(thickness: 3, color: Colors.white38),
-                  ),
+                  Padding(padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 8), child: Divider(thickness: 3, color: Colors.white38)),
 
                   // Weather container
                   Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                      vertical: verticalPadding,
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(screenWidth * 0.05),
                       child: BackdropFilter(
@@ -574,105 +376,45 @@ class _HomePageState extends State<HomePage> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: const Color.fromRGBO(255, 255, 255, 0.2),
-                            borderRadius: BorderRadius.circular(
-                              screenWidth * 0.05,
-                            ),
-                            border: Border.all(
-                              color: const Color.fromRGBO(255, 255, 255, 0.2),
-                              width: 1,
-                            ),
+                            borderRadius: BorderRadius.circular(screenWidth * 0.05),
+                            border: Border.all(color: const Color.fromRGBO(255, 255, 255, 0.2), width: 1),
                             boxShadow: [
-                              BoxShadow(
-                                color: const Color.fromRGBO(
-                                  255,
-                                  255,
-                                  255,
-                                  0.25,
-                                ),
-                                blurRadius: 12,
-                                offset: const Offset(0, 6),
-                              ),
+                              BoxShadow(color: const Color.fromRGBO(255, 255, 255, 0.25), blurRadius: 12, offset: const Offset(0, 6)),
                             ],
                           ),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: screenWidth * 0.05,
-                            vertical: screenHeight * 0.02,
-                          ),
+                          padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05, vertical: screenHeight * 0.02),
                           child: _isLoadingWeather
-                              ? const Center(
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                  ),
-                                )
+                              ? const Center(child: CircularProgressIndicator(color: Colors.white))
                               : Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Icon(
-                                      Icons.cloud,
-                                      size: screenWidth * 0.15,
-                                      color: Colors.white,
-                                    ),
+                                    Icon(Icons.cloud, size: screenWidth * 0.15, color: Colors.white),
                                     Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          "Weather",
-                                          style: TextStyle(
-                                            fontSize: subtitleFontSize,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        Text(
-                                          "$_temp°C",
-                                          style: TextStyle(
-                                            fontSize: subtitleFontSize * 1.5,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                            shadows: const [
-                                              Shadow(
-                                                blurRadius: 4,
-                                                color: Colors.black45,
-                                                offset: Offset(1, 2),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                        Text("Weather", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white)),
+                                        Text("$_temp°C",
+                                            style: TextStyle(
+                                                fontSize: subtitleFontSize * 1.5,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                                shadows: const [Shadow(blurRadius: 4, color: Colors.black45, offset: Offset(1, 2))])),
                                       ],
                                     ),
                                     ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        maxWidth: screenWidth * 0.3,
-                                      ),
+                                      constraints: BoxConstraints(maxWidth: screenWidth * 0.3),
                                       child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            _cityName,
-                                            style: TextStyle(
-                                              fontSize: subtitleFontSize,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          Text(
-                                            _stateName,
-                                            style: TextStyle(
-                                              fontSize: subtitleFontSize * 1.5,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                              shadows: const [
-                                                Shadow(
-                                                  blurRadius: 4,
-                                                  color: Colors.black54,
-                                                  offset: Offset(1, 2),
-                                                ),
-                                              ],
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                          Text(_cityName, style: TextStyle(fontSize: subtitleFontSize, color: Colors.white)),
+                                          Text(_stateName,
+                                              style: TextStyle(
+                                                  fontSize: subtitleFontSize * 1.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                  shadows: const [Shadow(blurRadius: 4, color: Colors.black54, offset: Offset(1, 2))]),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis),
                                         ],
                                       ),
                                     ),
@@ -683,70 +425,55 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
 
-                  // Devices grid or empty state when no devices added
+                  // Devices grid
                   Expanded(
-                    child: _devices.isEmpty
-                        ? Center(
+                    child: ValueListenableBuilder<Map<String, bool>>(
+                      valueListenable: _deviceStatus,
+                      builder: (context, statusMap, _) {
+                        if (_devices.isEmpty) {
+                          return Center(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.device_hub,
-                                  size: 56,
-                                  color: Colors.white24,
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  "No devices added yet",
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
+                              children: const [
+                                Icon(Icons.device_hub, size: 56, color: Colors.white24),
+                                SizedBox(height: 12),
+                                Text("No devices added yet", style: TextStyle(color: Colors.white70, fontSize: 16)),
+                                SizedBox(height: 12),
                               ],
                             ),
-                          )
-                        : GridView.builder(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: horizontalPadding,
-                            ),
-                            itemCount: _devices.length,
-                            gridDelegate:
-                                SliverGridDelegateWithMaxCrossAxisExtent(
-                                  maxCrossAxisExtent: screenWidth * 0.5,
-                                  childAspectRatio: 0.8,
-                                  mainAxisSpacing: screenHeight * 0.02,
-                                  crossAxisSpacing: screenWidth * 0.03,
-                                ),
-                            itemBuilder: (context, index) {
-                              final dev = _devices[index];
-                              final type = (dev['type'] ?? '')
-                                  .toString()
-                                  .toLowerCase();
-                              final iconPath =
-                                  type.contains('clothe') ||
-                                      type.contains('hanger')
-                                  ? 'lib/icons/drying-rack.png'
-                                  : 'lib/icons/door-open.png';
-                              return GestureDetector(
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => _pageForIndex(index),
-                                  ),
-                                ),
-                                child: ViewDevices(
-                                  deviceType: dev['type'] ?? '',
-                                  devicePart: dev['name'] ?? '',
-                                  iconPath: iconPath,
-                                  status: dev['status'] ?? true,
-                                  onChanged: (value) =>
-                                      powerSwitchChanged(value, index),
-                                ),
-                              );
-                            },
+                          );
+                        }
+
+                        return GridView.builder(
+                          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                          itemCount: _devices.length,
+                          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: screenWidth * 0.5,
+                            childAspectRatio: 0.8,
+                            mainAxisSpacing: screenHeight * 0.02,
+                            crossAxisSpacing: screenWidth * 0.03,
                           ),
+                          itemBuilder: (context, index) {
+                            final dev = _devices[index];
+                            final type = (dev['type'] ?? '').toString().toLowerCase();
+                            final iconPath = type.contains('clothe') || type.contains('hanger')
+                                ? 'lib/icons/drying-rack.png'
+                                : 'lib/icons/door-open.png';
+
+                            return GestureDetector(
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _pageForDevice(dev))),
+                              child: ViewDevices(
+                                deviceType: dev['type'] ?? '',
+                                devicePart: dev['name'] ?? '',
+                                iconPath: iconPath,
+                                status: statusMap[dev['id']] ?? true,
+                                onChanged: (value) => powerSwitchChanged(value, dev['id']),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:smart_horizon_home/views/pages/login/login_page.dart';
-import 'package:smart_horizon_home/views/pages/signup/signup_page.dart';
 
 class CreateAccount extends StatefulWidget {
   final String name;
@@ -51,7 +50,6 @@ class CreateAccountState extends State<CreateAccount> {
     super.dispose();
   }
 
-  // ===== Password Validation =====
   String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) return 'Please enter your password';
     if (value.length < 8) return 'Password must be at least 8 characters';
@@ -72,7 +70,6 @@ class CreateAccountState extends State<CreateAccount> {
     return null;
   }
 
-  // ===== Pop-up Dialog =====
   Future<void> _showPopup(String title, String message) {
     return showDialog(
       context: context,
@@ -110,7 +107,7 @@ class CreateAccountState extends State<CreateAccount> {
     }
 
     try {
-      // === 1. Check if username already exists ===
+      // Check if username already exists
       final usernameQuery = await FirebaseFirestore.instance
           .collection('users')
           .where('username', isEqualTo: usernameController.text.trim())
@@ -125,17 +122,17 @@ class CreateAccountState extends State<CreateAccount> {
         return;
       }
 
-      // === 2. Create Firebase Authentication account ===
+      // Create Firebase Authentication account
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
             email: widget.email,
             password: passwordController.text.trim(),
           );
 
-      // === 3. Save user profile in Firestore (use email as doc ID) ===
+      // Save user profile in Firestore
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(widget.email) // ← CHANGED TO USE EMAIL AS DOCUMENT ID
+          .doc(widget.email) // use email as document ID
           .set({
             'uid': userCredential.user!.uid,
             'username': usernameController.text.trim(),
@@ -152,10 +149,8 @@ class CreateAccountState extends State<CreateAccount> {
             'createdAt': FieldValue.serverTimestamp(),
           });
 
-      // === 4. Show success popup ===
       await _showPopup('Success', 'Account created successfully!');
 
-      // === 5. Redirect to LoginPage ===
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const LoginPage()),
@@ -172,7 +167,10 @@ class CreateAccountState extends State<CreateAccount> {
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
+      resizeToAvoidBottomInset: true, // important for keyboard
       body: Container(
         height: double.infinity,
         decoration: const BoxDecoration(
@@ -185,14 +183,12 @@ class CreateAccountState extends State<CreateAccount> {
         ),
         child: SafeArea(
           bottom: false,
-          child: Container(
-            padding: EdgeInsets.all(20),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const SizedBox(height: 20),
-
-                // Title
                 const Text(
                   "CREATE ACCOUNT",
                   style: TextStyle(
@@ -205,7 +201,7 @@ class CreateAccountState extends State<CreateAccount> {
 
                 // User info summary
                 Container(
-                  padding: EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
@@ -233,8 +229,9 @@ class CreateAccountState extends State<CreateAccount> {
                 ),
                 const SizedBox(height: 30),
 
+                // Username & Password fields
                 Container(
-                  padding: EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20),
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -260,7 +257,7 @@ class CreateAccountState extends State<CreateAccount> {
                         obscureText: !showPassword,
                         decoration: InputDecoration(
                           prefixIconColor: Colors.black54,
-                          prefixIcon: Icon(Icons.key),
+                          prefixIcon: const Icon(Icons.key),
                           hintText: "PASSWORD",
                           border: const OutlineInputBorder(),
                           suffixIcon: IconButton(
@@ -282,7 +279,7 @@ class CreateAccountState extends State<CreateAccount> {
                         obscureText: !showConfirm,
                         decoration: InputDecoration(
                           prefixIconColor: Colors.black54,
-                          prefixIcon: Icon(Icons.key),
+                          prefixIcon: const Icon(Icons.key),
                           hintText: "CONFIRM PASSWORD",
                           border: const OutlineInputBorder(),
                           suffixIcon: IconButton(
@@ -316,6 +313,9 @@ class CreateAccountState extends State<CreateAccount> {
                           ),
                         ),
                       ),
+
+                      // Add extra spacing for keyboard
+                      SizedBox(height: screenHeight * 0.05),
                     ],
                   ),
                 ),
