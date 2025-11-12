@@ -53,6 +53,18 @@ class _LoginPageState extends State<LoginPage> {
     String password = passwordController.text.trim();
     String emailToUse = loginInput;
 
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const Center(child: CircularProgressIndicator(
+          color: Colors.blue,
+          backgroundColor: Colors.transparent,
+        ));
+      },
+    );
+
     try {
       // Check if input is a username (not email)
       if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(loginInput)) {
@@ -64,6 +76,7 @@ class _LoginPageState extends State<LoginPage> {
         if (!mounted) return;
 
         if (querySnapshot.docs.isEmpty) {
+          Navigator.pop(context); // close loading dialog
           _showPopup("Error", "No user found with this username");
           return;
         }
@@ -76,6 +89,7 @@ class _LoginPageState extends State<LoginPage> {
         password: password,
       );
 
+      Navigator.pop(context); // close loading dialog
       _showPopup("Success", "Login successful!");
 
       if (!mounted) return;
@@ -84,6 +98,7 @@ class _LoginPageState extends State<LoginPage> {
         MaterialPageRoute(builder: (_) => const HomePage()),
       );
     } on FirebaseAuthException catch (e) {
+      Navigator.pop(context); // close loading dialog
       String message = "Login failed";
       if (e.code == 'user-not-found') {
         message = "No user found with this email";
@@ -91,6 +106,9 @@ class _LoginPageState extends State<LoginPage> {
         message = "Wrong password";
       }
       _showPopup("Error", message);
+    } catch (e) {
+      Navigator.pop(context); // close loading dialog
+      _showPopup("Error", "An unexpected error occurred");
     }
   }
 
@@ -264,7 +282,7 @@ class _LoginPageState extends State<LoginPage> {
                                 color: Colors.black,
                                 decoration: TextDecoration.underline,
                                 fontWeight: FontWeight.bold,
-                              ), 
+                              ),
                             ),
                           ),
                         ),
