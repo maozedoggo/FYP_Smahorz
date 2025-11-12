@@ -354,7 +354,7 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
         children: [
           Row(
             children: [
-              const Icon(Icons.how_to_vote, color: Colors.blueAccent, size: 24),
+              Icon(Icons.how_to_vote, color: Colors.blue.shade300, size: 24),
               const SizedBox(width: 8),
               Text(
                 "Admin Election",
@@ -425,7 +425,7 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text("Vote / Change Vote"),
+                      : const Text("Vote / Change Vote", style: TextStyle(color: Colors.white),),
                 ),
               ),
               const SizedBox(width: 8),

@@ -16,7 +16,7 @@ class NotificationPage extends StatelessWidget {
   ) async {
     final firestore = FirebaseFirestore.instance;
 
-    // ✅ Update invite status in the *user’s* notification subcollection
+    // Update invite status in user notifications
     await firestore
         .collection('users')
         .doc(userEmail)
@@ -25,34 +25,73 @@ class NotificationPage extends StatelessWidget {
         .update({'status': status});
 
     if (status == 'accepted') {
-      // ✅ Add invited user to inviter's household members
-      await firestore
-          .collection('users')
-          .doc(inviterEmail)
-          .collection('householdMembers')
-          .doc(userEmail)
-          .set({'email': userEmail, 'joinedAt': FieldValue.serverTimestamp()});
+      try {
+        // ✅ STEP 1: Get inviter’s householdId if not provided
+        String? inviterHouseholdId = householdId;
+        if (inviterHouseholdId == null || inviterHouseholdId.isEmpty) {
+          final inviterDoc = await firestore
+              .collection('users')
+              .doc(inviterEmail)
+              .get();
 
-      // ✅ Update invited user's profile with householdId
-      await firestore.collection('users').doc(userEmail).update({
-        'householdId': householdId,
-      });
+          if (inviterDoc.exists) {
+            final inviterData = inviterDoc.data();
+            final inviterHid = inviterData?['householdId'];
 
-      // ✅ Notify inviter user that invite was accepted
-      await firestore
-          .collection('users')
-          .doc(inviterEmail)
-          .collection('notifications')
-          .add({
-            'fromEmail': userEmail,
-            'householdId': householdId,
-            'householdName': householdName,
-            'type': 'household_response',
-            'status': 'accepted',
-            'sentAt': FieldValue.serverTimestamp(),
-          });
+            if (inviterHid != null && inviterHid.toString().isNotEmpty) {
+              inviterHouseholdId = inviterHid.toString();
+            }
+          }
+        }
+
+        if (inviterHouseholdId == null || inviterHouseholdId.isEmpty) {
+          debugPrint("Inviter has no household ID — cannot join household.");
+          return;
+        }
+
+        // ✅ STEP 2: Update user’s profile with inviter’s householdId & role
+        await firestore.collection('users').doc(userEmail).set({
+          'householdId': inviterHouseholdId,
+          'role': 'member',
+        }, SetOptions(merge: true));
+
+        // ✅ STEP 3: Add user as member in household collection
+        final householdRef = firestore
+            .collection('households')
+            .doc(inviterHouseholdId);
+        await householdRef.set({
+          'members': FieldValue.arrayUnion([userEmail]),
+        }, SetOptions(merge: true));
+
+        // ✅ STEP 4: Clean up pending invites
+        final pending = await firestore
+            .collection('householdInvites')
+            .where('toEmail', isEqualTo: userEmail)
+            .where('householdId', isEqualTo: inviterHouseholdId)
+            .where('status', isEqualTo: 'pending')
+            .get();
+        for (final doc in pending.docs) {
+          await doc.reference.delete();
+        }
+
+        // ✅ STEP 5: Notify inviter that invite was accepted
+        await firestore
+            .collection('users')
+            .doc(inviterEmail)
+            .collection('notifications')
+            .add({
+              'fromEmail': userEmail,
+              'householdId': inviterHouseholdId,
+              'householdName': householdName,
+              'type': 'household_response',
+              'status': 'accepted',
+              'sentAt': FieldValue.serverTimestamp(),
+            });
+      } catch (e) {
+        debugPrint("Error accepting invite: $e");
+      }
     } else if (status == 'rejected') {
-      // ✅ Notify inviter user that invite was rejected
+      // Notify inviter that invite was rejected
       await firestore
           .collection('users')
           .doc(inviterEmail)
@@ -92,10 +131,10 @@ class NotificationPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.grey.shade800),
         boxShadow: [
-          BoxShadow(
+          const BoxShadow(
             color: Color.fromRGBO(0, 0, 0, 0.35),
             blurRadius: 8,
-            offset: const Offset(0, 6),
+            offset: Offset(0, 6),
           ),
         ],
       ),
@@ -116,19 +155,17 @@ class NotificationPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFF0B1220),
       appBar: AppBar(
-        leading: IconButton(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-        ),
         backgroundColor: const Color(0xFF07101A),
         centerTitle: true,
         title: const Text(
           "Notifications",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+        ),
       ),
-
-      // NOW LISTEN FROM USER’S SUBCOLLECTION
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')
@@ -141,7 +178,7 @@ class NotificationPage extends StatelessWidget {
             return Center(
               child: Text(
                 "Error: ${snapshot.error}",
-                style: TextStyle(color: Colors.white70),
+                style: const TextStyle(color: Colors.white70),
               ),
             );
           }
@@ -209,8 +246,6 @@ class NotificationPage extends StatelessWidget {
                         subtitle,
                         style: const TextStyle(color: Colors.white70),
                       ),
-
-                      // ✅ Accept/Reject buttons still work as before
                       trailing:
                           (type == 'household_invite' && status == 'pending')
                           ? Row(

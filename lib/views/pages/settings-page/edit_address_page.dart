@@ -29,7 +29,6 @@ class _EditAddressPageState extends State<EditAddressPage> {
   void initState() {
     super.initState();
 
-    // Initialize controllers with initial data from SettingsPage
     _addressLine1Controller = TextEditingController(
       text: widget.initialAddress['addressLine1'] ?? '',
     );
@@ -60,7 +59,6 @@ class _EditAddressPageState extends State<EditAddressPage> {
     }
 
     try {
-      // Use email as document ID (users collection uses email as doc id)
       userDocRef = FirebaseFirestore.instance
           .collection('users')
           .doc(user.email);
@@ -77,23 +75,12 @@ class _EditAddressPageState extends State<EditAddressPage> {
           _countryController.text = data['country'] ?? 'Malaysia';
           isLoading = false;
         });
-
-        debugPrint("=== LOADED ADDRESS FROM FIRESTORE ===");
-        debugPrint("Address Line 1: ${data['addressLine1']}");
-        debugPrint("District: ${data['district']}");
-        debugPrint("State: ${data['state']}");
-        debugPrint("Postal Code: ${data['postalCode']}");
-        debugPrint("Country: ${data['country']}");
-        debugPrint("=== END DEBUG ===");
       } else {
         setState(() => isLoading = false);
-        debugPrint("User document not found for email: ${user.email}");
-        // Don't show error - just use the initial data from SettingsPage
       }
     } catch (e) {
       setState(() => isLoading = false);
       debugPrint("Error loading address: $e");
-      // Don't show error - just use the initial data from SettingsPage
     }
   }
 
@@ -114,12 +101,10 @@ class _EditAddressPageState extends State<EditAddressPage> {
     try {
       await userDocRef!.set(updatedAddress, SetOptions(merge: true));
 
-      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Address updated successfully!")),
       );
 
-      // Return updated address to SettingsPage
       Navigator.pop(context, updatedAddress);
     } catch (e) {
       debugPrint("Error saving address: $e");
@@ -129,29 +114,41 @@ class _EditAddressPageState extends State<EditAddressPage> {
     }
   }
 
-  @override
-  void dispose() {
-    _addressLine1Controller.dispose();
-    _addressLine2Controller.dispose();
-    _districtController.dispose();
-    _stateController.dispose();
-    _postalCodeController.dispose();
-    _countryController.dispose();
-    super.dispose();
+  InputDecoration _inputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white70),
+      prefixIcon: Icon(icon, color: Colors.white70),
+      filled: true,
+      fillColor: const Color(0xFF1E293B),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 240, 240, 241),
+      backgroundColor: const Color(0xFF0B1220),
       appBar: AppBar(
-        title: const Text("Edit Address"),
+        backgroundColor: const Color(0xFF07101A),
+        title: const Text(
+          "Edit Address",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          IconButton(icon: const Icon(Icons.save), onPressed: _saveAddress),
+          IconButton(
+            icon: const Icon(Icons.save, color: Colors.white),
+            onPressed: _saveAddress,
+          ),
         ],
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : Padding(
               padding: const EdgeInsets.all(16.0),
               child: Form(
@@ -162,79 +159,81 @@ class _EditAddressPageState extends State<EditAddressPage> {
                       controller: _addressLine1Controller,
                       validator: (v) =>
                           v == null || v.trim().isEmpty ? 'Required' : null,
-                      decoration: const InputDecoration(
-                        labelText: "Address Line 1*",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.home),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDecoration(
+                        "Address Line 1*",
+                        Icons.home,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     TextFormField(
                       controller: _addressLine2Controller,
-                      decoration: const InputDecoration(
-                        labelText: "Address Line 2",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.home_work),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDecoration(
+                        "Address Line 2",
+                        Icons.home_work,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     TextFormField(
                       controller: _districtController,
                       validator: (v) =>
                           v == null || v.trim().isEmpty ? 'Required' : null,
-                      decoration: const InputDecoration(
-                        labelText: "District / City*",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.location_city),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDecoration(
+                        "District / City*",
+                        Icons.location_city,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     TextFormField(
                       controller: _stateController,
                       validator: (v) =>
                           v == null || v.trim().isEmpty ? 'Required' : null,
-                      decoration: const InputDecoration(
-                        labelText: "State*",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.map),
-                      ),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDecoration("State*", Icons.map),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     TextFormField(
                       controller: _postalCodeController,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       validator: (v) =>
                           v == null || v.trim().isEmpty ? 'Required' : null,
-                      decoration: const InputDecoration(
-                        labelText: "Postal Code*",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.markunread_mailbox),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDecoration(
+                        "Postal Code*",
+                        Icons.markunread_mailbox,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     TextFormField(
                       controller: _countryController,
                       validator: (v) =>
                           v == null || v.trim().isEmpty ? 'Required' : null,
-                      decoration: const InputDecoration(
-                        labelText: "Country*",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.public),
-                      ),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDecoration("Country*", Icons.public),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 28),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _saveAddress,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          padding: const EdgeInsets.all(16),
+                          backgroundColor: Colors.blueAccent,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 6,
                         ),
                         child: const Text(
                           "Save Changes",
-                          style: TextStyle(fontSize: 16),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
