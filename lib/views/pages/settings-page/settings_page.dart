@@ -495,39 +495,6 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  // ---------- Demote admin ----------
-  Future<void> _demoteAdmin(String email) async {
-    if (householdDocRef == null) return;
-    if (userRole != 'owner') {
-      _showInfo("Only owner can demote admins.");
-      return;
-    }
-    if (email == currentEmail) {
-      _showInfo("Owner cannot demote themselves here.");
-      return;
-    }
-
-    try {
-      final hSnap = await householdDocRef!.get();
-      final hData = hSnap.data()!;
-      final admins = List<String>.from(hData['admins'] ?? []);
-      admins.remove(email);
-      await householdDocRef!.update({'admins': admins});
-      await _fire.collection('users').doc(email).set({
-        'role': 'member',
-      }, SetOptions(merge: true));
-      await _loadData();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Admin demoted.")));
-    } catch (e) {
-      debugPrint("Error demoting admin: $e");
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error demoting: $e")));
-    }
-  }
-
   // ---------- Leave household ----------
   Future<void> _leaveHousehold() async {
     if (householdDocRef == null) return;

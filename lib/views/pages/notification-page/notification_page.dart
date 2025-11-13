@@ -28,7 +28,7 @@ class NotificationPage extends StatelessWidget {
       try {
         // ✅ STEP 1: Get inviter’s householdId if not provided
         String? inviterHouseholdId = householdId;
-        if (inviterHouseholdId == null || inviterHouseholdId.isEmpty) {
+        if (inviterHouseholdId.isEmpty) {
           final inviterDoc = await firestore
               .collection('users')
               .doc(inviterEmail)
@@ -44,7 +44,7 @@ class NotificationPage extends StatelessWidget {
           }
         }
 
-        if (inviterHouseholdId == null || inviterHouseholdId.isEmpty) {
+        if (inviterHouseholdId.isEmpty) {
           debugPrint("Inviter has no household ID — cannot join household.");
           return;
         }

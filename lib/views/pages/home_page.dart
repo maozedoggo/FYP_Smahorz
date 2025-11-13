@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -27,7 +26,6 @@ class _HomePageState extends State<HomePage> {
   int _temp = 0;
   String _stateName = "State";
 
-  // Devices
   List<Map<String, dynamic>> _devices = [];
   final ValueNotifier<Map<String, bool>> _deviceStatus = ValueNotifier({});
 
@@ -43,14 +41,16 @@ class _HomePageState extends State<HomePage> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.email).get();
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(user.email).get();
       if (!userDoc.exists) return;
 
       final userData = userDoc.data() ?? {};
       final householdId = userData['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return;
 
-      final householdDoc = await FirebaseFirestore.instance.collection('households').doc(householdId).get();
+      final householdDoc =
+          await FirebaseFirestore.instance.collection('households').doc(householdId).get();
       if (!householdDoc.exists) return;
 
       final deviceIds = List<String>.from(householdDoc.data()?['devices'] ?? []);
@@ -70,10 +70,7 @@ class _HomePageState extends State<HomePage> {
       }
 
       if (!mounted) return;
-
-      setState(() {
-        _devices = loaded;
-      });
+      setState(() => _devices = loaded);
       _deviceStatus.value = statusMap;
     } catch (e) {
       debugPrint("Error loading household devices: $e");
@@ -85,13 +82,16 @@ class _HomePageState extends State<HomePage> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final deviceDoc = await FirebaseFirestore.instance.collection('devices').doc(id).get();
+      final deviceDoc =
+          await FirebaseFirestore.instance.collection('devices').doc(id).get();
       if (!deviceDoc.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device not found.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Device not found.')));
         return;
       }
 
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.email).get();
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(user.email).get();
       final userData = userDoc.data() ?? {};
       final householdId = userData['householdId'];
       if (householdId == null || householdId.toString().isEmpty) {
@@ -106,10 +106,12 @@ class _HomePageState extends State<HomePage> {
       }, SetOptions(merge: true));
 
       await _loadUserDevices();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device added to household.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Device added to household.')));
     } catch (e) {
       debugPrint('Error adding device: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error adding device: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error adding device: $e')));
     }
   }
 
@@ -117,7 +119,8 @@ class _HomePageState extends State<HomePage> {
     final inHousehold = await _isUserInHousehold();
     if (!inHousehold) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You must be part of a household before adding a device.')),
+        const SnackBar(
+            content: Text('You must be part of a household before adding a device.')),
       );
       return;
     }
@@ -127,7 +130,8 @@ class _HomePageState extends State<HomePage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Insert Your Device ID'),
-        content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Device ID')),
+        content:
+            TextField(controller: controller, decoration: const InputDecoration(hintText: 'Device ID')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           ElevatedButton(
@@ -149,14 +153,14 @@ class _HomePageState extends State<HomePage> {
   Future<bool> _isUserInHousehold() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return false;
-
     try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.email).get();
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(user.email).get();
       if (!userDoc.exists) return false;
       final householdId = userDoc.data()?['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return false;
-
-      final householdDoc = await FirebaseFirestore.instance.collection('households').doc(householdId).get();
+      final householdDoc =
+          await FirebaseFirestore.instance.collection('households').doc(householdId).get();
       return householdDoc.exists;
     } catch (e) {
       debugPrint('Error checking household: $e');
@@ -169,7 +173,6 @@ class _HomePageState extends State<HomePage> {
       await weatherAPI.fetchData();
       await weatherAPI.callApi();
       if (!mounted) return;
-
       setState(() {
         _stateName = weatherAPI.stateName ?? "Unknown";
         _cityName = weatherAPI.cityName ?? "Unknown";
@@ -186,10 +189,7 @@ class _HomePageState extends State<HomePage> {
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
-    );
+        context, MaterialPageRoute(builder: (_) => const LoginPage()), (route) => false);
   }
 
   void powerSwitchChanged(bool value, String deviceId) {
@@ -199,7 +199,6 @@ class _HomePageState extends State<HomePage> {
   Widget _pageForDevice(Map<String, dynamic> device) {
     final type = (device['type'] ?? '').toString().toLowerCase();
     final name = (device['name'] ?? '').toString().toLowerCase();
-
     if (type.contains('clothe') || type.contains('hanger')) return const ClotheHanger();
     if (type.contains('parcel') || name.contains('parcel')) {
       if (name.contains('inside') || type.contains('inside')) return const ParcelBack();
@@ -252,7 +251,8 @@ class _HomePageState extends State<HomePage> {
                         ListTile(
                           onTap: () {
                             drawerController.hideDrawer();
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage()));
+                            Navigator.push(
+                                context, MaterialPageRoute(builder: (_) => ProfilePage()));
                           },
                           leading: const Icon(Icons.account_circle_rounded),
                           title: const Text('Profile'),
@@ -260,7 +260,8 @@ class _HomePageState extends State<HomePage> {
                         ListTile(
                           onTap: () {
                             drawerController.hideDrawer();
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsPage()));
+                            Navigator.push(
+                                context, MaterialPageRoute(builder: (_) => SettingsPage()));
                           },
                           leading: const Icon(Icons.settings),
                           title: const Text('Settings'),
@@ -272,12 +273,16 @@ class _HomePageState extends State<HomePage> {
                     child: TextButton.icon(
                       onPressed: _signout,
                       icon: Icon(Icons.logout_rounded, color: Colors.red[700], size: iconSize),
-                      label: Text("Logout", style: TextStyle(color: Colors.red[700], fontSize: subtitleFontSize)),
+                      label: Text("Logout",
+                          style:
+                              TextStyle(color: Colors.red[700], fontSize: subtitleFontSize)),
                     ),
                   ),
                   DefaultTextStyle(
                     style: TextStyle(fontSize: screenWidth * 0.03, color: Colors.white),
-                    child: Container(margin: const EdgeInsets.symmetric(vertical: 16.0), child: const Text('Smart Horizon Home')),
+                    child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 16.0),
+                        child: const Text('Smart Horizon Home')),
                   ),
                 ],
               ),
@@ -300,9 +305,9 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Top bar
+                  // Top App Bar
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
+                    padding: EdgeInsetsGeometry.symmetric(horizontal: horizontalPadding - 10, vertical: verticalPadding),
                     child: Row(
                       children: [
                         IconButton(
@@ -312,9 +317,8 @@ class _HomePageState extends State<HomePage> {
                         const Spacer(),
                         IconButton(
                           icon: Icon(Icons.notifications, size: iconSize, color: Colors.white),
-                          onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationPage()));
-                          },
+                          onPressed: () => Navigator.push(
+                              context, MaterialPageRoute(builder: (_) => NotificationPage())),
                         ),
                         IconButton(
                           icon: Icon(Icons.add_circle, size: iconSize, color: Colors.white),
@@ -324,7 +328,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
 
-                  // Welcome text
+                  // Welcome Text
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                     child: Column(
@@ -333,99 +337,130 @@ class _HomePageState extends State<HomePage> {
                         Text(
                           "Welcome Home",
                           style: TextStyle(
-                            fontSize: titleFontSize,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            shadows: const [Shadow(blurRadius: 4, color: Colors.black54, offset: Offset(1, 2))],
-                          ),
+                              fontSize: titleFontSize,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              shadows: const [
+                                Shadow(
+                                    blurRadius: 4,
+                                    color: Colors.black54,
+                                    offset: Offset(1, 2))
+                              ]),
                         ),
                         if (userEmail != null)
                           StreamBuilder<DocumentSnapshot>(
-                            stream: FirebaseFirestore.instance.collection("users").doc(userEmail).snapshots(),
+                            stream: FirebaseFirestore.instance
+                                .collection("users")
+                                .doc(userEmail)
+                                .snapshots(),
                             builder: (context, snapshot) {
-                              if (snapshot.connectionState == ConnectionState.waiting) {
-                                return Text("...", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white70));
-                              }
-                              if (!snapshot.hasData || !snapshot.data!.exists) {
-                                return Text("No username", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white70));
-                              }
+                              if (snapshot.connectionState == ConnectionState.waiting)
+                                return Text("...",
+                                    style: TextStyle(
+                                        fontSize: subtitleFontSize, color: Colors.white70));
+                              if (!snapshot.hasData || !snapshot.data!.exists)
+                                return Text("No username",
+                                    style: TextStyle(
+                                        fontSize: subtitleFontSize, color: Colors.white70));
                               final data = snapshot.data!.data() as Map<String, dynamic>?;
-                              return Text(
-                                data?['username'] ?? "",
-                                style: TextStyle(fontSize: subtitleFontSize, color: Colors.white, shadows: const [
-                                  Shadow(blurRadius: 2, color: Colors.black54, offset: Offset(0.5, 1)),
-                                ]),
-                              );
+                              return Text(data?['username'] ?? "",
+                                  style: TextStyle(
+                                      fontSize: subtitleFontSize,
+                                      color: Colors.white,
+                                      shadows: const [
+                                        Shadow(
+                                            blurRadius: 2,
+                                            color: Colors.black54,
+                                            offset: Offset(0.5, 1))
+                                      ]));
                             },
                           )
                         else
-                          Text("Not logged in", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white70)),
+                          Text("Not logged in",
+                              style: TextStyle(fontSize: subtitleFontSize, color: Colors.white70)),
                       ],
                     ),
                   ),
 
-                  Padding(padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 8), child: Divider(thickness: 3, color: Colors.white38)),
-
-                  // Weather container
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(screenWidth * 0.05),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color.fromRGBO(255, 255, 255, 0.2),
-                            borderRadius: BorderRadius.circular(screenWidth * 0.05),
-                            border: Border.all(color: const Color.fromRGBO(255, 255, 255, 0.2), width: 1),
-                            boxShadow: [
-                              BoxShadow(color: const Color.fromRGBO(255, 255, 255, 0.25), blurRadius: 12, offset: const Offset(0, 6)),
-                            ],
-                          ),
-                          padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05, vertical: screenHeight * 0.02),
-                          child: _isLoadingWeather
-                              ? const Center(child: CircularProgressIndicator(color: Colors.white))
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding, vertical: 8),
+                      child: Divider(thickness: 3, color: Colors.white38)),
+
+                  // Weather Card
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: horizontalPadding, vertical: verticalPadding),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Color.fromRGBO(255, 255, 255, 0.15),
+                        borderRadius: BorderRadius.circular(screenWidth * 0.05),
+                        border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.1), width: 1),
+                        boxShadow: [
+                          BoxShadow(
+                              color: const Color.fromRGBO(255, 255, 255, 0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4))
+                        ],
+                      ),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding, vertical: screenHeight * 0.02),
+                      child: _isLoadingWeather
+                          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Icon(Icons.cloud,
+                                    size: screenWidth * 0.15, color: Colors.white),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(Icons.cloud, size: screenWidth * 0.15, color: Colors.white),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text("Weather", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white)),
-                                        Text("$_temp°C",
-                                            style: TextStyle(
-                                                fontSize: subtitleFontSize * 1.5,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                                shadows: const [Shadow(blurRadius: 4, color: Colors.black45, offset: Offset(1, 2))])),
-                                      ],
-                                    ),
-                                    ConstrainedBox(
-                                      constraints: BoxConstraints(maxWidth: screenWidth * 0.3),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(_cityName, style: TextStyle(fontSize: subtitleFontSize, color: Colors.white)),
-                                          Text(_stateName,
-                                              style: TextStyle(
-                                                  fontSize: subtitleFontSize * 1.5,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.white,
-                                                  shadows: const [Shadow(blurRadius: 4, color: Colors.black54, offset: Offset(1, 2))]),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis),
-                                        ],
-                                      ),
-                                    ),
+                                    Text("Weather",
+                                        style: TextStyle(
+                                            fontSize: subtitleFontSize, color: Colors.white)),
+                                    Text("$_temp°C",
+                                        style: TextStyle(
+                                            fontSize: subtitleFontSize * 1.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                            shadows: const [
+                                              Shadow(
+                                                  blurRadius: 4,
+                                                  color: Colors.black45,
+                                                  offset: Offset(1, 2))
+                                            ])),
                                   ],
                                 ),
-                        ),
-                      ),
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(maxWidth: screenWidth * 0.3),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(_cityName,
+                                          style: TextStyle(
+                                              fontSize: subtitleFontSize, color: Colors.white)),
+                                      Text(_stateName,
+                                          style: TextStyle(
+                                              fontSize: subtitleFontSize * 1.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                              shadows: const [
+                                                Shadow(
+                                                    blurRadius: 4,
+                                                    color: Colors.black54,
+                                                    offset: Offset(1, 2))
+                                              ]),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                     ),
                   ),
 
-                  // Devices grid
+                  // Devices Grid
                   Expanded(
                     child: ValueListenableBuilder<Map<String, bool>>(
                       valueListenable: _deviceStatus,
@@ -437,7 +472,8 @@ class _HomePageState extends State<HomePage> {
                               children: const [
                                 Icon(Icons.device_hub, size: 56, color: Colors.white24),
                                 SizedBox(height: 12),
-                                Text("No devices added yet", style: TextStyle(color: Colors.white70, fontSize: 16)),
+                                Text("No devices added yet",
+                                    style: TextStyle(color: Colors.white70, fontSize: 16)),
                                 SizedBox(height: 12),
                               ],
                             ),
@@ -461,7 +497,8 @@ class _HomePageState extends State<HomePage> {
                                 : 'lib/icons/door-open.png';
 
                             return GestureDetector(
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _pageForDevice(dev))),
+                              onTap: () =>
+                                  Navigator.push(context, MaterialPageRoute(builder: (_) => _pageForDevice(dev))),
                               child: ViewDevices(
                                 deviceType: dev['type'] ?? '',
                                 devicePart: dev['name'] ?? '',
