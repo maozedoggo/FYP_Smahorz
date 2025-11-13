@@ -4,15 +4,24 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SchedulePage extends StatefulWidget {
   final String deviceName;
+  final String deviceId;
+  final String householdUid; // Pass the household UID here
+  final String deviceType;
 
-  const SchedulePage({super.key, required this.deviceName});
+  const SchedulePage({
+    super.key,
+    required this.deviceName,
+    required this.deviceId,
+    required this.householdUid,
+    required this.deviceType,
+  });
 
   @override
   State<SchedulePage> createState() => _SchedulePageState();
 }
 
 class _SchedulePageState extends State<SchedulePage> {
-  DateTime today = DateTime.now();
+  DateTime selectedDay = DateTime.now();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   List<Map<String, dynamic>> _schedules = [];
@@ -21,28 +30,57 @@ class _SchedulePageState extends State<SchedulePage> {
   @override
   void initState() {
     super.initState();
-    _loadSchedulesForDay(today);
+    // Ensures async load runs after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _ensureDeviceDocument();
+      await _loadSchedulesForDay(selectedDay);
+    });
+  }
+
+  /// Ensure the device document exists before adding/querying schedules
+  Future<void> _ensureDeviceDocument() async {
+    final deviceDocRef = _firestore
+        .collection('households')
+        .doc(widget.householdUid)
+        .collection('devices')
+        .doc(widget.deviceId);
+
+    final docSnapshot = await deviceDocRef.get();
+    if (!docSnapshot.exists) {
+      await deviceDocRef.set({
+        'name': widget.deviceName,
+        'type': widget.deviceType,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
   }
 
   void _onDaySelected(DateTime day, DateTime focusedDay) {
+    if (day.isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
+      // Prevent selecting past dates
+      return;
+    }
     setState(() {
-      today = day;
+      selectedDay = day;
       _loading = true;
     });
     _loadSchedulesForDay(day);
   }
 
-  /// Fetch schedules for the selected day
+  // Fetch schedules for the selected day
   Future<void> _loadSchedulesForDay(DateTime day) async {
     try {
-      final selectedDate =
+      final dateKey =
           "${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}";
 
       final snapshot = await _firestore
+          .collection('households')
+          .doc(widget.householdUid)
           .collection('devices')
-          .doc(widget.deviceName)
+          .doc(widget.deviceId)
           .collection('schedules')
-          .where('date', isEqualTo: selectedDate)
+          .where('date', isEqualTo: dateKey)
+          .orderBy('time')
           .get();
 
       setState(() {
@@ -66,14 +104,17 @@ class _SchedulePageState extends State<SchedulePage> {
     }
   }
 
-  /// Add schedule to Firestore
+  // Add schedule to Firestore
   Future<void> _addSchedule(String time, String action) async {
+    await _ensureDeviceDocument(); // ensure device exists
     final dateKey =
-        "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+        "${selectedDay.year}-${selectedDay.month.toString().padLeft(2, '0')}-${selectedDay.day.toString().padLeft(2, '0')}";
 
     await _firestore
+        .collection('households')
+        .doc(widget.householdUid)
         .collection('devices')
-        .doc(widget.deviceName)
+        .doc(widget.deviceId)
         .collection('schedules')
         .add({
           'date': dateKey,
@@ -82,24 +123,26 @@ class _SchedulePageState extends State<SchedulePage> {
           'createdAt': FieldValue.serverTimestamp(),
         });
 
-    await _loadSchedulesForDay(today);
+    await _loadSchedulesForDay(selectedDay);
   }
 
-  /// Delete schedule from Firestore
+  // Delete schedule from Firestore
   Future<void> _deleteSchedule(String id) async {
     await _firestore
+        .collection('households')
+        .doc(widget.householdUid)
         .collection('devices')
-        .doc(widget.deviceName)
+        .doc(widget.deviceId)
         .collection('schedules')
         .doc(id)
         .delete();
 
-    await _loadSchedulesForDay(today);
+    await _loadSchedulesForDay(selectedDay);
   }
 
   void _addScheduleDialog() {
     TimeOfDay? selectedTime;
-    String selectedAction = "Turn ON"; // default action
+    String selectedAction = "Turn ON";
 
     showDialog(
       context: context,
@@ -121,7 +164,6 @@ class _SchedulePageState extends State<SchedulePage> {
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Time picker
                   ListTile(
                     leading: const Icon(
                       Icons.access_time,
@@ -138,7 +180,6 @@ class _SchedulePageState extends State<SchedulePage> {
                         context: context,
                         initialTime: TimeOfDay.now(),
                         builder: (context, child) {
-                          // Dark theme for the time picker
                           return Theme(
                             data: ThemeData.dark().copyWith(
                               colorScheme: const ColorScheme.dark(
@@ -151,15 +192,11 @@ class _SchedulePageState extends State<SchedulePage> {
                         },
                       );
                       if (picked != null) {
-                        setState(() {
-                          selectedTime = picked;
-                        });
+                        setState(() => selectedTime = picked);
                       }
                     },
                   ),
                   const SizedBox(height: 20),
-
-                  // Action toggle buttons
                   const Text(
                     "Select Action",
                     style: TextStyle(color: Colors.white70),
@@ -177,10 +214,9 @@ class _SchedulePageState extends State<SchedulePage> {
                         ),
                         selected: selectedAction == "Turn ON",
                         selectedColor: Colors.blueAccent,
-                        onSelected: (bool selected) {
-                          if (selected) {
+                        onSelected: (selected) {
+                          if (selected)
                             setState(() => selectedAction = "Turn ON");
-                          }
                         },
                       ),
                       const SizedBox(width: 10),
@@ -193,10 +229,9 @@ class _SchedulePageState extends State<SchedulePage> {
                         ),
                         selected: selectedAction == "Turn OFF",
                         selectedColor: Colors.redAccent,
-                        onSelected: (bool selected) {
-                          if (selected) {
+                        onSelected: (selected) {
+                          if (selected)
                             setState(() => selectedAction = "Turn OFF");
-                          }
                         },
                       ),
                     ],
@@ -238,7 +273,8 @@ class _SchedulePageState extends State<SchedulePage> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedDate = "${today.day}/${today.month}/${today.year}";
+    final selectedDateStr =
+        "${selectedDay.day}/${selectedDay.month}/${selectedDay.year}";
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B1220),
@@ -277,42 +313,13 @@ class _SchedulePageState extends State<SchedulePage> {
 
             // Calendar
             TableCalendar(
-              focusedDay: today,
-              firstDay: DateTime.utc(2025, 10, 1),
+              focusedDay: selectedDay,
+              firstDay: DateTime.now(), // prevent past dates
               lastDay: DateTime.utc(2050, 12, 31),
               calendarFormat: CalendarFormat.month,
               startingDayOfWeek: StartingDayOfWeek.monday,
-              daysOfWeekVisible: true,
-              enabledDayPredicate: (day) {
-                return !day.isBefore(
-                  DateTime(
-                    DateTime.now().year,
-                    DateTime.now().month,
-                    DateTime.now().day,
-                  ),
-                );
-              },
-              headerStyle: const HeaderStyle(
-                formatButtonVisible: false,
-                titleCentered: true,
-                titleTextStyle: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.normal,
-                  color: Colors.white,
-                ),
-                leftChevronIcon: Icon(
-                  Icons.chevron_left,
-                  color: Colors.white70,
-                ),
-                rightChevronIcon: Icon(
-                  Icons.chevron_right,
-                  color: Colors.white70,
-                ),
-              ),
-              availableGestures: AvailableGestures.all,
-              rowHeight: 60,
               onDaySelected: _onDaySelected,
-              selectedDayPredicate: (day) => isSameDay(today, day),
+              selectedDayPredicate: (day) => isSameDay(selectedDay, day),
               calendarStyle: CalendarStyle(
                 todayDecoration: BoxDecoration(
                   color: Colors.grey[850],
@@ -326,11 +333,24 @@ class _SchedulePageState extends State<SchedulePage> {
                 defaultTextStyle: const TextStyle(color: Colors.white),
                 disabledTextStyle: const TextStyle(color: Colors.grey),
               ),
+              headerStyle: const HeaderStyle(
+                formatButtonVisible: false,
+                titleCentered: true,
+                leftChevronIcon: Icon(
+                  Icons.chevron_left,
+                  color: Colors.white70,
+                ),
+                rightChevronIcon: Icon(
+                  Icons.chevron_right,
+                  color: Colors.white70,
+                ),
+                titleTextStyle: TextStyle(fontSize: 20, color: Colors.white),
+              ),
             ),
 
             const SizedBox(height: 10),
 
-            // Schedule title
+            // Schedule List title
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Row(
@@ -342,7 +362,7 @@ class _SchedulePageState extends State<SchedulePage> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    "Schedules for $selectedDate",
+                    "Schedules for $selectedDateStr",
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,

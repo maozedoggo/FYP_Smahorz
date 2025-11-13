@@ -5,9 +5,7 @@ import 'package:flutter_advanced_drawer/flutter_advanced_drawer.dart';
 import 'package:smart_horizon_home/ui/view_devices.dart';
 import 'package:smart_horizon_home/services/weather_services.dart';
 import 'package:smart_horizon_home/views/pages/notification-page/notification_page.dart';
-import 'package:smart_horizon_home/views/pages/smart-devices/clothe_hanger.dart';
-import 'package:smart_horizon_home/views/pages/smart-devices/parcel_outside.dart';
-import 'package:smart_horizon_home/views/pages/smart-devices/parcel_inside.dart';
+import 'package:smart_horizon_home/views/pages/smart-devices/device_page.dart';
 import 'package:smart_horizon_home/views/pages/profile-page/profile_page.dart';
 import 'package:smart_horizon_home/views/pages/settings-page/settings_page.dart';
 import 'package:smart_horizon_home/views/pages/login/login_page.dart';
@@ -41,24 +39,33 @@ class _HomePageState extends State<HomePage> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final userDoc =
-          await FirebaseFirestore.instance.collection('users').doc(user.email).get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.email)
+          .get();
       if (!userDoc.exists) return;
 
       final userData = userDoc.data() ?? {};
       final householdId = userData['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return;
 
-      final householdDoc =
-          await FirebaseFirestore.instance.collection('households').doc(householdId).get();
+      final householdDoc = await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .get();
       if (!householdDoc.exists) return;
 
-      final deviceIds = List<String>.from(householdDoc.data()?['devices'] ?? []);
+      final deviceIds = List<String>.from(
+        householdDoc.data()?['devices'] ?? [],
+      );
       final loaded = <Map<String, dynamic>>[];
       final statusMap = <String, bool>{};
 
       for (final id in deviceIds) {
-        final d = await FirebaseFirestore.instance.collection('devices').doc(id).get();
+        final d = await FirebaseFirestore.instance
+            .collection('devices')
+            .doc(id)
+            .get();
         if (!d.exists) continue;
         final dd = d.data() ?? {};
         loaded.add({
@@ -82,36 +89,48 @@ class _HomePageState extends State<HomePage> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final deviceDoc =
-          await FirebaseFirestore.instance.collection('devices').doc(id).get();
+      final deviceDoc = await FirebaseFirestore.instance
+          .collection('devices')
+          .doc(id)
+          .get();
       if (!deviceDoc.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Device not found.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Device not found.')));
         return;
       }
 
-      final userDoc =
-          await FirebaseFirestore.instance.collection('users').doc(user.email).get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.email)
+          .get();
       final userData = userDoc.data() ?? {};
       final householdId = userData['householdId'];
       if (householdId == null || householdId.toString().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You are not assigned to any household.')),
+          const SnackBar(
+            content: Text('You are not assigned to any household.'),
+          ),
         );
         return;
       }
 
-      await FirebaseFirestore.instance.collection('households').doc(householdId).set({
-        'devices': FieldValue.arrayUnion([id]),
-      }, SetOptions(merge: true));
+      await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .set({
+            'devices': FieldValue.arrayUnion([id]),
+          }, SetOptions(merge: true));
 
       await _loadUserDevices();
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Device added to household.')));
+        const SnackBar(content: Text('Device added to household.')),
+      );
     } catch (e) {
       debugPrint('Error adding device: $e');
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error adding device: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error adding device: $e')));
     }
   }
 
@@ -120,7 +139,10 @@ class _HomePageState extends State<HomePage> {
     if (!inHousehold) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('You must be part of a household before adding a device.')),
+          content: Text(
+            'You must be part of a household before adding a device.',
+          ),
+        ),
       );
       return;
     }
@@ -130,10 +152,15 @@ class _HomePageState extends State<HomePage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Insert Your Device ID'),
-        content:
-            TextField(controller: controller, decoration: const InputDecoration(hintText: 'Device ID')),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Device ID'),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
               final id = controller.text.trim();
@@ -154,13 +181,17 @@ class _HomePageState extends State<HomePage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return false;
     try {
-      final userDoc =
-          await FirebaseFirestore.instance.collection('users').doc(user.email).get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.email)
+          .get();
       if (!userDoc.exists) return false;
       final householdId = userDoc.data()?['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return false;
-      final householdDoc =
-          await FirebaseFirestore.instance.collection('households').doc(householdId).get();
+      final householdDoc = await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .get();
       return householdDoc.exists;
     } catch (e) {
       debugPrint('Error checking household: $e');
@@ -189,7 +220,10 @@ class _HomePageState extends State<HomePage> {
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
-        context, MaterialPageRoute(builder: (_) => const LoginPage()), (route) => false);
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
+    );
   }
 
   void powerSwitchChanged(bool value, String deviceId) {
@@ -197,14 +231,11 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _pageForDevice(Map<String, dynamic> device) {
-    final type = (device['type'] ?? '').toString().toLowerCase();
-    final name = (device['name'] ?? '').toString().toLowerCase();
-    if (type.contains('clothe') || type.contains('hanger')) return const ClotheHanger();
-    if (type.contains('parcel') || name.contains('parcel')) {
-      if (name.contains('inside') || type.contains('inside')) return const ParcelBack();
-      return const ParcelFront();
-    }
-    return const ClotheHanger();
+    return DeviceControlPage(
+      deviceId: device['id'] ?? '',
+      deviceName: device['name'] ?? 'Unknown Device',
+      deviceType: device['type'] ?? 'Unknown Type',
+    );
   }
 
   @override
@@ -252,7 +283,9 @@ class _HomePageState extends State<HomePage> {
                           onTap: () {
                             drawerController.hideDrawer();
                             Navigator.push(
-                                context, MaterialPageRoute(builder: (_) => ProfilePage()));
+                              context,
+                              MaterialPageRoute(builder: (_) => ProfilePage()),
+                            );
                           },
                           leading: const Icon(Icons.account_circle_rounded),
                           title: const Text('Profile'),
@@ -261,7 +294,9 @@ class _HomePageState extends State<HomePage> {
                           onTap: () {
                             drawerController.hideDrawer();
                             Navigator.push(
-                                context, MaterialPageRoute(builder: (_) => SettingsPage()));
+                              context,
+                              MaterialPageRoute(builder: (_) => SettingsPage()),
+                            );
                           },
                           leading: const Icon(Icons.settings),
                           title: const Text('Settings'),
@@ -272,17 +307,29 @@ class _HomePageState extends State<HomePage> {
                   Center(
                     child: TextButton.icon(
                       onPressed: _signout,
-                      icon: Icon(Icons.logout_rounded, color: Colors.red[700], size: iconSize),
-                      label: Text("Logout",
-                          style:
-                              TextStyle(color: Colors.red[700], fontSize: subtitleFontSize)),
+                      icon: Icon(
+                        Icons.logout_rounded,
+                        color: Colors.red[700],
+                        size: iconSize,
+                      ),
+                      label: Text(
+                        "Logout",
+                        style: TextStyle(
+                          color: Colors.red[700],
+                          fontSize: subtitleFontSize,
+                        ),
+                      ),
                     ),
                   ),
                   DefaultTextStyle(
-                    style: TextStyle(fontSize: screenWidth * 0.03, color: Colors.white),
+                    style: TextStyle(
+                      fontSize: screenWidth * 0.03,
+                      color: Colors.white,
+                    ),
                     child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 16.0),
-                        child: const Text('Smart Horizon Home')),
+                      margin: const EdgeInsets.symmetric(vertical: 16.0),
+                      child: const Text('Smart Horizon Home'),
+                    ),
                   ),
                 ],
               ),
@@ -297,7 +344,11 @@ class _HomePageState extends State<HomePage> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFF0063A1), Color(0xFF0982BA), Color(0xFF04111C)],
+                colors: [
+                  Color(0xFF0063A1),
+                  Color(0xFF0982BA),
+                  Color(0xFF04111C),
+                ],
                 stops: [0.21, 0.41, 1.0],
               ),
             ),
@@ -307,21 +358,40 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   // Top App Bar
                   Padding(
-                    padding: EdgeInsetsGeometry.symmetric(horizontal: horizontalPadding - 10, vertical: verticalPadding),
+                    padding: EdgeInsetsGeometry.symmetric(
+                      horizontal: horizontalPadding - 10,
+                      vertical: verticalPadding,
+                    ),
                     child: Row(
                       children: [
                         IconButton(
-                          icon: Icon(Icons.menu, size: iconSize, color: Colors.white),
+                          icon: Icon(
+                            Icons.menu,
+                            size: iconSize,
+                            color: Colors.white,
+                          ),
                           onPressed: () => drawerController.toggleDrawer(),
                         ),
                         const Spacer(),
                         IconButton(
-                          icon: Icon(Icons.notifications, size: iconSize, color: Colors.white),
+                          icon: Icon(
+                            Icons.notifications,
+                            size: iconSize,
+                            color: Colors.white,
+                          ),
                           onPressed: () => Navigator.push(
-                              context, MaterialPageRoute(builder: (_) => NotificationPage())),
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => NotificationPage(),
+                            ),
+                          ),
                         ),
                         IconButton(
-                          icon: Icon(Icons.add_circle, size: iconSize, color: Colors.white),
+                          icon: Icon(
+                            Icons.add_circle,
+                            size: iconSize,
+                            color: Colors.white,
+                          ),
                           onPressed: _showAddDeviceDialog,
                         ),
                       ],
@@ -330,22 +400,26 @@ class _HomePageState extends State<HomePage> {
 
                   // Welcome Text
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: horizontalPadding,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           "Welcome Home",
                           style: TextStyle(
-                              fontSize: titleFontSize,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              shadows: const [
-                                Shadow(
-                                    blurRadius: 4,
-                                    color: Colors.black54,
-                                    offset: Offset(1, 2))
-                              ]),
+                            fontSize: titleFontSize,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            shadows: const [
+                              Shadow(
+                                blurRadius: 4,
+                                color: Colors.black54,
+                                offset: Offset(1, 2),
+                              ),
+                            ],
+                          ),
                         ),
                         if (userEmail != null)
                           StreamBuilder<DocumentSnapshot>(
@@ -354,104 +428,161 @@ class _HomePageState extends State<HomePage> {
                                 .doc(userEmail)
                                 .snapshots(),
                             builder: (context, snapshot) {
-                              if (snapshot.connectionState == ConnectionState.waiting)
-                                return Text("...",
-                                    style: TextStyle(
-                                        fontSize: subtitleFontSize, color: Colors.white70));
-                              if (!snapshot.hasData || !snapshot.data!.exists)
-                                return Text("No username",
-                                    style: TextStyle(
-                                        fontSize: subtitleFontSize, color: Colors.white70));
-                              final data = snapshot.data!.data() as Map<String, dynamic>?;
-                              return Text(data?['username'] ?? "",
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting)
+                                return Text(
+                                  "...",
                                   style: TextStyle(
-                                      fontSize: subtitleFontSize,
-                                      color: Colors.white,
-                                      shadows: const [
-                                        Shadow(
-                                            blurRadius: 2,
-                                            color: Colors.black54,
-                                            offset: Offset(0.5, 1))
-                                      ]));
+                                    fontSize: subtitleFontSize,
+                                    color: Colors.white70,
+                                  ),
+                                );
+                              if (!snapshot.hasData || !snapshot.data!.exists)
+                                return Text(
+                                  "No username",
+                                  style: TextStyle(
+                                    fontSize: subtitleFontSize,
+                                    color: Colors.white70,
+                                  ),
+                                );
+                              final data =
+                                  snapshot.data!.data()
+                                      as Map<String, dynamic>?;
+                              return Text(
+                                data?['username'] ?? "",
+                                style: TextStyle(
+                                  fontSize: subtitleFontSize,
+                                  color: Colors.white,
+                                  shadows: const [
+                                    Shadow(
+                                      blurRadius: 2,
+                                      color: Colors.black54,
+                                      offset: Offset(0.5, 1),
+                                    ),
+                                  ],
+                                ),
+                              );
                             },
                           )
                         else
-                          Text("Not logged in",
-                              style: TextStyle(fontSize: subtitleFontSize, color: Colors.white70)),
+                          Text(
+                            "Not logged in",
+                            style: TextStyle(
+                              fontSize: subtitleFontSize,
+                              color: Colors.white70,
+                            ),
+                          ),
                       ],
                     ),
                   ),
 
                   Padding(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: horizontalPadding, vertical: 8),
-                      child: Divider(thickness: 3, color: Colors.white38)),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: horizontalPadding,
+                      vertical: 8,
+                    ),
+                    child: Divider(thickness: 3, color: Colors.white38),
+                  ),
 
                   // Weather Card
                   Padding(
                     padding: EdgeInsets.symmetric(
-                        horizontal: horizontalPadding, vertical: verticalPadding),
+                      horizontal: horizontalPadding,
+                      vertical: verticalPadding,
+                    ),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Color.fromRGBO(255, 255, 255, 0.15),
                         borderRadius: BorderRadius.circular(screenWidth * 0.05),
-                        border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.1), width: 1),
+                        border: Border.all(
+                          color: Color.fromRGBO(255, 255, 255, 0.1),
+                          width: 1,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                              color: const Color.fromRGBO(255, 255, 255, 0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4))
+                            color: const Color.fromRGBO(255, 255, 255, 0.15),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
                         ],
                       ),
                       padding: EdgeInsets.symmetric(
-                          horizontal: horizontalPadding, vertical: screenHeight * 0.02),
+                        horizontal: horizontalPadding,
+                        vertical: screenHeight * 0.02,
+                      ),
                       child: _isLoadingWeather
-                          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                          ? const Center(
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                              ),
+                            )
                           : Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Icon(Icons.cloud,
-                                    size: screenWidth * 0.15, color: Colors.white),
+                                Icon(
+                                  Icons.cloud,
+                                  size: screenWidth * 0.15,
+                                  color: Colors.white,
+                                ),
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text("Weather",
-                                        style: TextStyle(
-                                            fontSize: subtitleFontSize, color: Colors.white)),
-                                    Text("$_temp°C",
-                                        style: TextStyle(
-                                            fontSize: subtitleFontSize * 1.5,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                            shadows: const [
-                                              Shadow(
-                                                  blurRadius: 4,
-                                                  color: Colors.black45,
-                                                  offset: Offset(1, 2))
-                                            ])),
+                                    Text(
+                                      "Weather",
+                                      style: TextStyle(
+                                        fontSize: subtitleFontSize,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    Text(
+                                      "$_temp°C",
+                                      style: TextStyle(
+                                        fontSize: subtitleFontSize * 1.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        shadows: const [
+                                          Shadow(
+                                            blurRadius: 4,
+                                            color: Colors.black45,
+                                            offset: Offset(1, 2),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                 ),
                                 ConstrainedBox(
-                                  constraints: BoxConstraints(maxWidth: screenWidth * 0.3),
+                                  constraints: BoxConstraints(
+                                    maxWidth: screenWidth * 0.3,
+                                  ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(_cityName,
-                                          style: TextStyle(
-                                              fontSize: subtitleFontSize, color: Colors.white)),
-                                      Text(_stateName,
-                                          style: TextStyle(
-                                              fontSize: subtitleFontSize * 1.5,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                              shadows: const [
-                                                Shadow(
-                                                    blurRadius: 4,
-                                                    color: Colors.black54,
-                                                    offset: Offset(1, 2))
-                                              ]),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis),
+                                      Text(
+                                        _cityName,
+                                        style: TextStyle(
+                                          fontSize: subtitleFontSize,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      Text(
+                                        _stateName,
+                                        style: TextStyle(
+                                          fontSize: subtitleFontSize * 1.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                          shadows: const [
+                                            Shadow(
+                                              blurRadius: 4,
+                                              color: Colors.black54,
+                                              offset: Offset(1, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -470,10 +601,19 @@ class _HomePageState extends State<HomePage> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: const [
-                                Icon(Icons.device_hub, size: 56, color: Colors.white24),
+                                Icon(
+                                  Icons.device_hub,
+                                  size: 56,
+                                  color: Colors.white24,
+                                ),
                                 SizedBox(height: 12),
-                                Text("No devices added yet",
-                                    style: TextStyle(color: Colors.white70, fontSize: 16)),
+                                Text(
+                                  "No devices added yet",
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 16,
+                                  ),
+                                ),
                                 SizedBox(height: 12),
                               ],
                             ),
@@ -481,30 +621,42 @@ class _HomePageState extends State<HomePage> {
                         }
 
                         return GridView.builder(
-                          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                          itemCount: _devices.length,
-                          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: screenWidth * 0.5,
-                            childAspectRatio: 0.8,
-                            mainAxisSpacing: screenHeight * 0.02,
-                            crossAxisSpacing: screenWidth * 0.03,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: horizontalPadding,
                           ),
+                          itemCount: _devices.length,
+                          gridDelegate:
+                              SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: screenWidth * 0.5,
+                                childAspectRatio: 0.8,
+                                mainAxisSpacing: screenHeight * 0.02,
+                                crossAxisSpacing: screenWidth * 0.03,
+                              ),
                           itemBuilder: (context, index) {
                             final dev = _devices[index];
-                            final type = (dev['type'] ?? '').toString().toLowerCase();
-                            final iconPath = type.contains('clothe') || type.contains('hanger')
+                            final type = (dev['type'] ?? '')
+                                .toString()
+                                .toLowerCase();
+                            final iconPath =
+                                type.contains('clothe') ||
+                                    type.contains('hanger')
                                 ? 'lib/icons/drying-rack.png'
                                 : 'lib/icons/door-open.png';
 
                             return GestureDetector(
-                              onTap: () =>
-                                  Navigator.push(context, MaterialPageRoute(builder: (_) => _pageForDevice(dev))),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => _pageForDevice(dev),
+                                ),
+                              ),
                               child: ViewDevices(
                                 deviceType: dev['type'] ?? '',
                                 devicePart: dev['name'] ?? '',
                                 iconPath: iconPath,
                                 status: statusMap[dev['id']] ?? true,
-                                onChanged: (value) => powerSwitchChanged(value, dev['id']),
+                                onChanged: (value) =>
+                                    powerSwitchChanged(value, dev['id']),
                               ),
                             );
                           },
