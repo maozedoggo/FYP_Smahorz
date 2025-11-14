@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_advanced_drawer/flutter_advanced_drawer.dart';
@@ -23,6 +24,7 @@ class _HomePageState extends State<HomePage> {
   String _cityName = "City";
   int _temp = 0;
   String _stateName = "State";
+  String _weatherLabel = "Weather"; // friendly label (Clouds, Rain, etc.)
 
   List<Map<String, dynamic>> _devices = [];
   final ValueNotifier<Map<String, bool>> _deviceStatus = ValueNotifier({});
@@ -208,12 +210,54 @@ class _HomePageState extends State<HomePage> {
         _stateName = weatherAPI.stateName ?? "Unknown";
         _cityName = weatherAPI.cityName ?? "Unknown";
         _temp = weatherAPI.currentTemp;
+        _weatherLabel =
+            (weatherAPI.weatherMain ??
+            weatherAPI.weatherDescription ??
+            "Weather");
         _isLoadingWeather = false;
       });
     } catch (e) {
       setState(() => _isLoadingWeather = false);
       debugPrint("Error loading weather: $e");
     }
+  }
+
+  // Map OpenWeather condition id to a Google Material Symbols SVG
+  Widget _weatherIconForId(int id, {double size = 24.0}) {
+    String svgPath;
+
+    switch (id) {
+      case >= 200 && < 300:
+        svgPath = 'lib/icons/weather/thunderstorm.svg'; // thunderstorm
+        break;
+      case >= 300 && < 500:
+        svgPath = 'lib/icons/weather/rainy.svg'; // drizzle
+        break;
+      case >= 500 && < 600:
+        svgPath = 'lib/icons/weather/rainy.svg'; // rain
+        break;
+      case >= 600 && < 700:
+        svgPath = 'lib/icons/weather/snowy.svg'; // snow
+        break;
+      case >= 700 && < 800:
+        svgPath = 'lib/icons/weather/foggy.svg'; // atmosphere: mist, smoke, fog
+        break;
+      case 800:
+        svgPath = 'lib/icons/weather/sunny.svg'; // clear
+        break;
+      case > 800 && < 900:
+        svgPath = 'lib/icons/weather/cloudy.svg'; // clouds
+        break;
+      default:
+        svgPath = 'lib/icons/weather/cloudy.svg'; // default
+    }
+
+    return SvgPicture.asset(
+      svgPath,
+      width: size,
+      height: size,
+      color: Colors.white, // Make the SVG white to match your theme
+    );
   }
 
   Future<void> _signout() async {
@@ -364,7 +408,7 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   // Top App Bar
                   Padding(
-                    padding: EdgeInsetsGeometry.symmetric(
+                    padding: EdgeInsets.symmetric(
                       horizontal: horizontalPadding - 10,
                       vertical: verticalPadding,
                     ),
@@ -531,19 +575,29 @@ class _HomePageState extends State<HomePage> {
                           : Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Icon(
-                                  Icons.cloud,
+                                // dynamic weather icon and label - UPDATED WITH SVG
+                                _weatherIconForId(
+                                  weatherAPI.statusID,
                                   size: screenWidth * 0.15,
-                                  color: Colors.white,
                                 ),
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      "Weather",
-                                      style: TextStyle(
-                                        fontSize: subtitleFontSize,
-                                        color: Colors.white,
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxWidth:
+                                            screenWidth *
+                                            0.25, // Limit width for text
+                                      ),
+                                      child: Text(
+                                        _weatherLabel,
+                                        style: TextStyle(
+                                          fontSize: subtitleFontSize,
+                                          color: Colors.white,
+                                        ),
+                                        maxLines: 1, // Allow up to 2 lines
+                                        overflow: TextOverflow
+                                            .ellipsis, // Add ellipsis if too long
                                       ),
                                     ),
                                     Text(

@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 class WeatherService {
   int currentTemp = 0;
   int statusID = 0;
+  String? weatherMain; // e.g. "Clouds", "Rain", "Clear"
+  String? weatherDescription; // e.g. "overcast clouds"
   String? cityName;
   String? stateName;
 
@@ -41,6 +43,9 @@ class WeatherService {
       final json = jsonDecode(response.body);
       currentTemp = (json['main']['temp']).round();
       statusID = json['weather'][0]['id'];
+      // set friendly fields
+      weatherMain = (json['weather'][0]['main']?.toString());
+      weatherDescription = (json['weather'][0]['description']?.toString());
     } else {
       throw Exception("Failed to load weather data: ${response.statusCode}");
     }
