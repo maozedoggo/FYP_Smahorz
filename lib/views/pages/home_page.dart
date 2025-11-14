@@ -274,29 +274,35 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        // Drawer items
                         ListTile(
                           onTap: () => drawerController.hideDrawer(),
                           leading: const Icon(Icons.home),
                           title: const Text('Home'),
                         ),
                         ListTile(
-                          onTap: () {
+                          onTap: () async {
                             drawerController.hideDrawer();
-                            Navigator.push(
+                            // await navigation and refresh devices when user returns
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(builder: (_) => ProfilePage()),
                             );
+                            if (!mounted) return;
+                            await _loadUserDevices();
                           },
                           leading: const Icon(Icons.account_circle_rounded),
                           title: const Text('Profile'),
                         ),
                         ListTile(
-                          onTap: () {
+                          onTap: () async {
                             drawerController.hideDrawer();
-                            Navigator.push(
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(builder: (_) => SettingsPage()),
                             );
+                            if (!mounted) return;
+                            await _loadUserDevices();
                           },
                           leading: const Icon(Icons.settings),
                           title: const Text('Settings'),
@@ -379,12 +385,16 @@ class _HomePageState extends State<HomePage> {
                             size: iconSize,
                             color: Colors.white,
                           ),
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => NotificationPage(),
-                            ),
-                          ),
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => NotificationPage(),
+                              ),
+                            );
+                            if (!mounted) return;
+                            await _loadUserDevices();
+                          },
                         ),
                         IconButton(
                           icon: Icon(
@@ -429,7 +439,7 @@ class _HomePageState extends State<HomePage> {
                                 .snapshots(),
                             builder: (context, snapshot) {
                               if (snapshot.connectionState ==
-                                  ConnectionState.waiting)
+                                  ConnectionState.waiting) {
                                 return Text(
                                   "...",
                                   style: TextStyle(
@@ -437,7 +447,8 @@ class _HomePageState extends State<HomePage> {
                                     color: Colors.white70,
                                   ),
                                 );
-                              if (!snapshot.hasData || !snapshot.data!.exists)
+                              }
+                              if (!snapshot.hasData || !snapshot.data!.exists) {
                                 return Text(
                                   "No username",
                                   style: TextStyle(
@@ -445,6 +456,7 @@ class _HomePageState extends State<HomePage> {
                                     color: Colors.white70,
                                   ),
                                 );
+                              }
                               final data =
                                   snapshot.data!.data()
                                       as Map<String, dynamic>?;
@@ -644,12 +656,16 @@ class _HomePageState extends State<HomePage> {
                                 : 'lib/icons/door-open.png';
 
                             return GestureDetector(
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => _pageForDevice(dev),
-                                ),
-                              ),
+                              onTap: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => _pageForDevice(dev),
+                                  ),
+                                );
+                                if (!mounted) return;
+                                await _loadUserDevices();
+                              },
                               child: ViewDevices(
                                 deviceType: dev['type'] ?? '',
                                 devicePart: dev['name'] ?? '',

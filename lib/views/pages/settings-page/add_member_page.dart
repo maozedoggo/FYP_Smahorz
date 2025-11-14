@@ -52,10 +52,9 @@ class _AddMemberPageState extends State<AddMemberPage> {
         return;
       }
 
-      if (!(userRole == 'owner' || userRole == 'admin')) {
-        setState(
-          () => _errorMessage = "Only household owners or admins can invite.",
-        );
+      // Only admins can invite now. Owner is a passive/creator role.
+      if (userRole != 'admin') {
+        setState(() => _errorMessage = "Only household admins can invite.");
         return;
       }
 

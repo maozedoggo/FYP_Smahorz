@@ -241,7 +241,8 @@ class _SettingsPageState extends State<SettingsPage> {
         'name': name,
         'ownerId': currentEmail,
         'members': [currentEmail],
-        'admins': [currentEmail],
+        // Do NOT auto-assign admin role to creator. Admins are chosen by vote.
+        'admins': [],
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -266,8 +267,11 @@ class _SettingsPageState extends State<SettingsPage> {
   // ---------- Save household info (admin only) ----------
   Future<void> _saveHouseholdInfo() async {
     if (householdDocRef == null) return;
-    if (!(userRole == 'owner' || userRole == 'admin')) {
-      _showInfo("You don't have permission to edit.");
+    // Only admins can edit household info now.
+    if (userRole != 'admin') {
+      _showInfo(
+        "You don't have permission to edit. Only admins can edit household information.",
+      );
       return;
     }
 
@@ -299,8 +303,9 @@ class _SettingsPageState extends State<SettingsPage> {
   // ---------- Invite member (by email) ----------
   Future<void> _sendInvite() async {
     if (householdId == null || currentEmail == null) return;
-    if (!(userRole == 'owner' || userRole == 'admin')) {
-      _showInfo("Only admins can invite members.");
+    // Only admins can invite now.
+    if (userRole != 'admin') {
+      _showInfo("Only household admins can invite members.");
       return;
     }
 
@@ -386,18 +391,12 @@ class _SettingsPageState extends State<SettingsPage> {
   // ---------- Remove member ----------
   Future<void> _removeMember(String email) async {
     if (householdDocRef == null) return;
-    if (!(userRole == 'owner' || userRole == 'admin')) {
-      _showInfo("Only owners or admins can remove members.");
+    // Only admins can remove members.
+    if (userRole != 'admin') {
+      _showInfo("Only household admins can remove members.");
       return;
     }
-    // don't remove owner
-    final hSnap = await householdDocRef!.get();
-    final hData = hSnap.data()!;
-    final ownerId = hData['ownerId'] as String?;
-    if (email == ownerId) {
-      _showInfo("Cannot remove the owner. Transfer ownership first.");
-      return;
-    }
+    // admins manage membership, including removing any member (owner remains a passive role).
 
     try {
       await _fire.runTransaction((tx) async {
@@ -420,78 +419,6 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error removing: $e")));
-    }
-  }
-
-  // ---------- Transfer admin (make other user owner/admin) ----------
-  Future<void> _transferOwnership(String newOwnerEmail) async {
-    if (householdDocRef == null) return;
-    if (userRole != 'owner') {
-      _showInfo("Only the owner can transfer ownership.");
-      return;
-    }
-    if (newOwnerEmail == currentEmail) {
-      _showInfo("You already are the owner.");
-      return;
-    }
-
-    final name = await _getMemberName(newOwnerEmail) ?? newOwnerEmail;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Transfer Ownership"),
-        content: Text(
-          "Transfer ownership to $name? You will lose owner rights.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Transfer"),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-
-    try {
-      // Update household ownerId and admins array, and update user roles
-      final hSnap = await householdDocRef!.get();
-      final hData = hSnap.data()!;
-      final oldOwner = hData['ownerId'] as String?;
-      final admins = List<String>.from(hData['admins'] ?? []);
-
-      // ensure newOwner is in admins
-      if (!admins.contains(newOwnerEmail)) admins.add(newOwnerEmail);
-      // keep old owner in admins (or demote to admin)
-      if (oldOwner != null && !admins.contains(oldOwner)) admins.add(oldOwner);
-
-      await _fire.runTransaction((tx) async {
-        tx.update(householdDocRef!, {
-          'ownerId': newOwnerEmail,
-          'admins': admins,
-        });
-        // set new owner role
-        tx.update(_fire.collection('users').doc(newOwnerEmail), {
-          'role': 'owner',
-        });
-        // demote previous owner to admin
-        if (oldOwner != null)
-          tx.update(_fire.collection('users').doc(oldOwner), {'role': 'admin'});
-      });
-
-      await _loadData();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Ownership transferred.")));
-    } catch (e) {
-      debugPrint("Error transferring ownership: $e");
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error transferring: $e")));
     }
   }
 
@@ -944,55 +871,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           onPressed: () => _removeMember(email),
                           tooltip: "Remove member",
                         ),
-                        // Promote / Transfer owner (only owner can transfer)
-                        if (userRole == 'owner')
-                          IconButton(
-                            icon: const Icon(
-                              Icons.manage_accounts,
-                              color: Colors.orangeAccent,
-                            ),
-                            onPressed: () => _transferOwnership(email),
-                            tooltip: "Transfer ownership",
-                          ),
-                        // If current user is admin (and not owner), allow promote to admin (simple promote)
-                        if (userRole == 'owner' &&
-                            role.toString().toLowerCase() != 'owner')
-                          IconButton(
-                            icon: const Icon(
-                              Icons.shield,
-                              color: Colors.greenAccent,
-                            ),
-                            onPressed: () async {
-                              // Promote to admin by adding to household admins and updating user role
-                              try {
-                                final hSnap = await householdDocRef!.get();
-                                final hData = hSnap.data()!;
-                                final admins = List<String>.from(
-                                  hData['admins'] ?? [],
-                                );
-                                if (!admins.contains(email)) admins.add(email);
-                                await householdDocRef!.update({
-                                  'admins': admins,
-                                });
-                                await _fire.collection('users').doc(email).set({
-                                  'role': 'admin',
-                                }, SetOptions(merge: true));
-                                await _loadData();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text("Promoted to admin."),
-                                  ),
-                                );
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text("Error promoting: $e"),
-                                  ),
-                                );
-                              }
-                            },
-                            tooltip: "Promote to admin",
-                          ),
                       ],
                     ),
                 ],
@@ -1094,7 +972,7 @@ class _SettingsPageState extends State<SettingsPage> {
           _headerRow(Icons.lock, "Administrator Control"),
           const SizedBox(height: 12),
           const Text(
-            "The owner/admin has full control over household settings and members.",
+            "Admins have control over household settings and members.",
             style: TextStyle(color: Colors.grey),
           ),
           const SizedBox(height: 12),
@@ -1150,43 +1028,21 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                             ],
                           ),
-                          if (userRole == 'owner')
-                            ElevatedButton(
-                              onPressed: () async {
-                                // Quick UX: let owner open a dialog with options to transfer to a member
-                                final selected = await showDialog<String?>(
-                                  context: context,
-                                  builder: (_) => TransferOwnerDialog(
-                                    members: memberEmails
-                                        .where((u) => u != currentEmail)
-                                        .toList(),
-                                    fire: _fire,
-                                  ),
-                                );
-                                if (selected != null) {
-                                  _transferOwnership(selected);
-                                }
-                              },
-                              child: const Text(
-                                "Transfer Owner",
-                                style: TextStyle(color: Color(0xFF111827)),
-                              ),
-                            )
-                          else
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 6,
-                                horizontal: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade900.withOpacity(0.16),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                "No permission",
-                                style: TextStyle(color: Colors.redAccent),
-                              ),
+                          // Owner is a passive role; ownership transfer is not provided here.
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 6,
+                              horizontal: 10,
                             ),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade900.withOpacity(0.16),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              "No owner controls",
+                              style: TextStyle(color: Colors.redAccent),
+                            ),
+                          ),
                         ],
                       );
                     },
@@ -1335,98 +1191,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
       ),
-    );
-  }
-}
-
-// Small dialog to choose member to transfer ownership to
-class TransferOwnerDialog extends StatefulWidget {
-  final List<String> members;
-  final FirebaseFirestore fire;
-  const TransferOwnerDialog({
-    super.key,
-    required this.members,
-    required this.fire,
-  });
-
-  @override
-  State<TransferOwnerDialog> createState() => _TransferOwnerDialogState();
-}
-
-class _TransferOwnerDialogState extends State<TransferOwnerDialog> {
-  String? _selectedEmail;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text("Transfer Ownership"),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.members.isEmpty)
-              const Text("No other members available to transfer to.")
-            else
-              FutureBuilder<List<Map<String, String>>>(
-                future: Future.wait(
-                  widget.members.map((email) async {
-                    final doc = await widget.fire
-                        .collection('users')
-                        .doc(email)
-                        .get();
-                    final data = doc.data();
-                    return {
-                      'email': email,
-                      'label': data?['username'] ?? data?['email'] ?? email,
-                    };
-                  }),
-                ),
-                builder: (context, snap) {
-                  if (!snap.hasData) {
-                    return const SizedBox(
-                      height: 80,
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-
-                  final list = snap.data!;
-                  return DropdownButton<String>(
-                    isExpanded: true,
-                    value: _selectedEmail,
-                    hint: const Text("Select member"),
-                    items: list.map((member) {
-                      return DropdownMenuItem<String>(
-                        value: member['email'],
-                        child: Text(member['label']!),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedEmail = val;
-                      });
-                    },
-                  );
-                },
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text("Cancel"),
-        ),
-        ElevatedButton(
-          onPressed: _selectedEmail == null
-              ? null
-              : () {
-                  // Handle ownership transfer logic here
-                  Navigator.pop(context, _selectedEmail);
-                },
-          child: const Text("Transfer"),
-        ),
-      ],
     );
   }
 }

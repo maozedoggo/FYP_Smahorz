@@ -107,17 +107,18 @@ class _HouseholdManagerState extends State<HouseholdManager> {
                   : controller.text.trim();
 
               // Create household document using email for admin and members
-              final newHousehold = await _firestore
-                  .collection('households')
-                  .add({
-                    'name': name,
-                    'adminId': user.email,
-                    'members': [user.email],
-                  });
+              final newHousehold = await _firestore.collection('households').add({
+                'name': name,
+                // Creator is owner but NOT auto-admin. Admin chosen via voting.
+                'adminId': null,
+                'members': [user.email],
+                'admins': [],
+              });
 
               await _firestore.collection('users').doc(user.email).update({
                 'householdId': newHousehold.id,
-                'isAdmin': true,
+                'isAdmin': false,
+                'role': 'owner',
               });
 
               Navigator.pop(context);
@@ -186,12 +187,16 @@ class _HouseholdManagerState extends State<HouseholdManager> {
               }
 
               // Create a notification for invitation
-              await _firestore.collection('users').doc(email).collection('notifications').add({
-                'fromEmail': _auth.currentUser!.email,
-                'type': 'household_invite',
-                'status': 'pending',
-                'sentAt': FieldValue.serverTimestamp(),
-              });
+              await _firestore
+                  .collection('users')
+                  .doc(email)
+                  .collection('notifications')
+                  .add({
+                    'fromEmail': _auth.currentUser!.email,
+                    'type': 'household_invite',
+                    'status': 'pending',
+                    'sentAt': FieldValue.serverTimestamp(),
+                  });
 
               if (context.mounted) {
                 Navigator.pop(context);

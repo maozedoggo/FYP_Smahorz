@@ -88,44 +88,16 @@ class _MemberProfilePageState extends State<MemberProfilePage> {
   }
 
   Future<void> _promoteToAdmin() async {
-    if (currentUserRole != 'owner') {
-      _showInfo("Only owner can promote.");
-      return;
-    }
-    if (widget.memberId == currentEmail) {
-      _showInfo("You are already the owner/admin.");
-      return;
-    }
-    if (householdId == null) {
-      _showInfo("Member is not in a household.");
-      return;
-    }
-
-    try {
-      final hRef = _fire.collection('households').doc(householdId);
-      final hSnap = await hRef.get();
-      if (!hSnap.exists) return;
-      final data = hSnap.data()!;
-      final admins = List<String>.from(data['admins'] ?? []);
-      if (!admins.contains(widget.memberId)) {
-        admins.add(widget.memberId);
-        await hRef.update({'admins': admins});
-        await _fire.collection('users').doc(widget.memberId).set({
-          'role': 'admin',
-        }, SetOptions(merge: true));
-        await _loadMemberProfile();
-        _showInfo("Promoted to admin.");
-      } else {
-        _showInfo("Already an admin.");
-      }
-    } catch (e) {
-      _showInfo("Error: $e");
-    }
+    // Manual promotion is not allowed. Admins are chosen by household voting.
+    _showInfo(
+      "Admin roles are determined by household voting. Manual promotion is not supported.",
+    );
   }
 
   Future<void> _removeFromHousehold() async {
-    if (!(currentUserRole == 'owner' || currentUserRole == 'admin')) {
-      _showInfo("Only owner/admin can remove members.");
+    // Only admins can remove members now
+    if (currentUserRole != 'admin') {
+      _showInfo("Only household admins can remove members.");
       return;
     }
     if (householdId == null) {
