@@ -7,6 +7,7 @@ class ViewDevices extends StatelessWidget {
   final String iconPath;
   final bool status;
   final void Function(bool)? onChanged;
+  final Color? statusColor;
 
   const ViewDevices({
     super.key,
@@ -15,6 +16,7 @@ class ViewDevices extends StatelessWidget {
     required this.iconPath,
     required this.status,
     required this.onChanged,
+    this.statusColor,
   });
 
   @override
@@ -28,7 +30,7 @@ class ViewDevices extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Color.fromRGBO(255, 255, 255, 0.15), // semi-transparent instead of blur
+        color: Color.fromRGBO(255, 255, 255, 0.15),
         borderRadius: BorderRadius.circular(screenWidth * 0.05),
         border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.1), width: 1),
         boxShadow: [
@@ -53,11 +55,7 @@ class ViewDevices extends StatelessWidget {
               fontSize: deviceFontSize,
               color: Colors.white,
               shadows: const [
-                Shadow(
-                  blurRadius: 3,
-                  color: Colors.black54,
-                  offset: Offset(1, 1),
-                ),
+                Shadow(blurRadius: 3, color: Colors.black54, offset: Offset(1, 1)),
               ],
             ),
             textAlign: TextAlign.center,
@@ -71,7 +69,7 @@ class ViewDevices extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: partFontSize,
-                    color: Colors.white,
+                    color: statusColor ?? Colors.white,
                   ),
                 ),
               ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_advanced_drawer/flutter_advanced_drawer.dart';
 import 'package:smart_horizon_home/ui/view_devices.dart';
 import 'package:smart_horizon_home/services/weather_services.dart';
@@ -21,20 +22,93 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final WeatherService weatherAPI = WeatherService();
+  final DatabaseReference _realtimeDB = FirebaseDatabase.instance.ref();
   bool _isLoadingWeather = true;
   String _cityName = "City";
   int _temp = 0;
   String _stateName = "State";
-  String _weatherLabel = "Weather"; // friendly label (Clouds, Rain, etc.)
+  String _weatherLabel = "Weather";
 
   List<Map<String, dynamic>> _devices = [];
   final ValueNotifier<Map<String, bool>> _deviceStatus = ValueNotifier({});
+  final ValueNotifier<Map<String, String>> _deviceRealtimeStatus =
+      ValueNotifier({});
 
   @override
   void initState() {
     super.initState();
     _loadWeather();
     _loadUserDevices();
+    _setupRealtimeListeners();
+    _testRealtimeDB();
+  }
+
+  void _testRealtimeDB() {
+    _realtimeDB
+        .child('test')
+        .set(DateTime.now().toString())
+        .then((_) {
+          print("✓ Realtime Database connection test: SUCCESS");
+        })
+        .catchError((error) {
+          print("✗ Realtime Database connection test: FAILED - $error");
+        });
+  }
+
+  void _setupRealtimeListeners() {
+    // Listen to motor status for clothes hanger and update switch state
+    _realtimeDB.child('motor').onValue.listen((event) {
+      if (event.snapshot.exists) {
+        final motorStatus = event.snapshot.value;
+        final bool isMotorOn = motorStatus == true;
+
+        print("Realtime DB update - motor: $isMotorOn");
+
+        // Update all clothes hanger devices' switch states
+        for (final device in _devices) {
+          final deviceType = (device['type'] ?? '').toString().toLowerCase();
+          if (deviceType.contains('hanger') || deviceType.contains('clothe')) {
+            _deviceStatus.value = {
+              ..._deviceStatus.value,
+              device['id']: isMotorOn,
+            };
+          }
+        }
+
+        _updateDeviceRealtimeStatus('motor', motorStatus.toString());
+      }
+    });
+
+    // Listen to rain sensor
+    _realtimeDB.child('rain').onValue.listen((event) {
+      if (event.snapshot.exists) {
+        final rainStatus = event.snapshot.value;
+        _updateDeviceRealtimeStatus('rain', rainStatus.toString());
+      }
+    });
+
+    // Listen to hanger status for detailed state
+    _realtimeDB.child('hanger/status').onValue.listen((event) {
+      if (event.snapshot.exists) {
+        final hangerStatus = event.snapshot.value.toString();
+        _updateDeviceRealtimeStatus('hanger', hangerStatus);
+      }
+    });
+
+    // Listen to hanger action for real-time feedback
+    _realtimeDB.child('hanger/action').onValue.listen((event) {
+      if (event.snapshot.exists) {
+        final action = event.snapshot.value.toString();
+        _updateDeviceRealtimeStatus('hanger_action', action);
+      }
+    });
+  }
+
+  void _updateDeviceRealtimeStatus(String deviceId, String status) {
+    _deviceRealtimeStatus.value = {
+      ..._deviceRealtimeStatus.value,
+      deviceId: status,
+    };
   }
 
   Future<void> _loadUserDevices() async {
@@ -85,6 +159,26 @@ class _HomePageState extends State<HomePage> {
     } catch (e) {
       debugPrint("Error loading household devices: $e");
     }
+  }
+
+  // Control IoT devices via Realtime Database
+  void _controlDevice(String deviceId, bool status) {
+    print("=== CONTROLLING DEVICE ===");
+    print("Device ID: $deviceId");
+    print("Switch Status: $status");
+    print("Sending to Realtime DB...");
+
+    _realtimeDB
+        .child(deviceId)
+        .set(status)
+        .then((_) {
+          print(
+            "✓ Successfully sent to Realtime Database: $deviceId = $status",
+          );
+        })
+        .catchError((error) {
+          print("✗ Error sending to Realtime Database: $error");
+        });
   }
 
   Future<void> _addDeviceById(String id) async {
@@ -183,7 +277,6 @@ class _HomePageState extends State<HomePage> {
     );
 
     if (res == "scan") {
-      // Navigate to QR scanner page
       final scannedId = await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const QRScannerPage()),
@@ -279,7 +372,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   void powerSwitchChanged(bool value, String deviceId) {
+    print("Switch changed for $deviceId: $value");
+
+    // Update local state
     _deviceStatus.value = {..._deviceStatus.value, deviceId: value};
+
+    // Control the actual IoT device via Realtime Database
+    _controlDevice(deviceId, value);
   }
 
   Widget _pageForDevice(Map<String, dynamic> device) {
@@ -288,6 +387,56 @@ class _HomePageState extends State<HomePage> {
       deviceName: device['name'] ?? 'Unknown Device',
       deviceType: device['type'] ?? 'Unknown Type',
     );
+  }
+
+  String _getStatusText(String deviceId, String deviceType) {
+    final realtimeStatus = _deviceRealtimeStatus.value[deviceId];
+    final deviceTypeLower = deviceType.toLowerCase();
+
+    // For clothes hanger devices
+    if (deviceTypeLower.contains('hanger') ||
+        deviceTypeLower.contains('clothe')) {
+      if (realtimeStatus != null) {
+        if (realtimeStatus == 'true') return 'Extended';
+        if (realtimeStatus == 'false') return 'Retracted';
+        if (realtimeStatus.contains('extending')) return 'Extending...';
+        if (realtimeStatus.contains('retracting')) return 'Retracting...';
+        if (realtimeStatus.contains('extended')) return 'Extended';
+        if (realtimeStatus.contains('retracted')) return 'Retracted';
+        return realtimeStatus;
+      }
+      return _deviceStatus.value[deviceId] == true ? 'Extended' : 'Retracted';
+    }
+
+    // For other devices
+    if (realtimeStatus != null) {
+      if (realtimeStatus == 'true') return 'On';
+      if (realtimeStatus == 'false') return 'Off';
+      return realtimeStatus;
+    }
+    return _deviceStatus.value[deviceId] == true ? 'On' : 'Off';
+  }
+
+  Color _getStatusColor(String deviceId, String deviceType) {
+    final realtimeStatus = _deviceRealtimeStatus.value[deviceId];
+    final deviceTypeLower = deviceType.toLowerCase();
+
+    if (deviceTypeLower.contains('hanger') ||
+        deviceTypeLower.contains('clothe')) {
+      if (realtimeStatus != null) {
+        if (realtimeStatus == 'true' || realtimeStatus.contains('extended'))
+          return Colors.green;
+        if (realtimeStatus == 'false' || realtimeStatus.contains('retracted'))
+          return Colors.red;
+        if (realtimeStatus.contains('extending') ||
+            realtimeStatus.contains('retracting'))
+          return Colors.orange;
+      }
+      return _deviceStatus.value[deviceId] == true ? Colors.green : Colors.red;
+    }
+
+    // Default status colors for other devices
+    return _deviceStatus.value[deviceId] == true ? Colors.green : Colors.red;
   }
 
   @override
@@ -457,6 +606,7 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                   ),
+
                   // Welcome Text & username
                   Padding(
                     padding: EdgeInsets.symmetric(
@@ -536,6 +686,7 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                   ),
+
                   Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: horizontalPadding,
@@ -543,6 +694,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     child: Divider(thickness: 3, color: Colors.white38),
                   ),
+
                   // Weather Card
                   Padding(
                     padding: EdgeInsets.symmetric(
@@ -655,77 +807,93 @@ class _HomePageState extends State<HomePage> {
                             ),
                     ),
                   ),
+
                   // Devices Grid
                   Expanded(
                     child: ValueListenableBuilder<Map<String, bool>>(
                       valueListenable: _deviceStatus,
                       builder: (context, statusMap, _) {
-                        if (_devices.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(
-                                  Icons.device_hub,
-                                  size: 56,
-                                  color: Colors.white24,
+                        return ValueListenableBuilder<Map<String, String>>(
+                          valueListenable: _deviceRealtimeStatus,
+                          builder: (context, realtimeStatusMap, _) {
+                            if (_devices.isEmpty) {
+                              return Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(
+                                      Icons.device_hub,
+                                      size: 56,
+                                      color: Colors.white24,
+                                    ),
+                                    SizedBox(height: 12),
+                                    Text(
+                                      "No devices added yet",
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    SizedBox(height: 12),
+                                  ],
                                 ),
-                                SizedBox(height: 12),
-                                Text(
-                                  "No devices added yet",
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                SizedBox(height: 12),
-                              ],
-                            ),
-                          );
-                        }
+                              );
+                            }
 
-                        return GridView.builder(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: horizontalPadding,
-                          ),
-                          itemCount: _devices.length,
-                          gridDelegate:
-                              SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: screenWidth * 0.5,
-                                childAspectRatio: 0.8,
-                                mainAxisSpacing: screenHeight * 0.02,
-                                crossAxisSpacing: screenWidth * 0.03,
+                            return GridView.builder(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: horizontalPadding,
                               ),
-                          itemBuilder: (context, index) {
-                            final dev = _devices[index];
-                            final type = (dev['type'] ?? '')
-                                .toString()
-                                .toLowerCase();
-                            final iconPath =
-                                type.contains('clothe') ||
-                                    type.contains('hanger')
-                                ? 'lib/icons/drying-rack.png'
-                                : 'lib/icons/door-open.png';
+                              itemCount: _devices.length,
+                              gridDelegate:
+                                  SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: screenWidth * 0.5,
+                                    childAspectRatio: 0.8,
+                                    mainAxisSpacing: screenHeight * 0.02,
+                                    crossAxisSpacing: screenWidth * 0.03,
+                                  ),
+                              itemBuilder: (context, index) {
+                                final dev = _devices[index];
+                                final type = (dev['type'] ?? '')
+                                    .toString()
+                                    .toLowerCase();
+                                final iconPath =
+                                    type.contains('clothe') ||
+                                        type.contains('hanger')
+                                    ? 'lib/icons/drying-rack.png'
+                                    : 'lib/icons/door-open.png';
 
-                            return GestureDetector(
-                              onTap: () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => _pageForDevice(dev),
+                                final statusText = _getStatusText(
+                                  dev['id'],
+                                  dev['type'],
+                                );
+                                final statusColor = _getStatusColor(
+                                  dev['id'],
+                                  dev['type'],
+                                );
+
+                                return GestureDetector(
+                                  onTap: () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => _pageForDevice(dev),
+                                      ),
+                                    );
+                                    if (!mounted) return;
+                                    await _loadUserDevices();
+                                  },
+                                  child: ViewDevices(
+                                    deviceType: dev['type'] ?? '',
+                                    devicePart: statusText,
+                                    iconPath: iconPath,
+                                    status: statusMap[dev['id']] ?? true,
+                                    onChanged: (value) =>
+                                        powerSwitchChanged(value, dev['id']),
+                                    statusColor: statusColor,
                                   ),
                                 );
-                                if (!mounted) return;
-                                await _loadUserDevices();
                               },
-                              child: ViewDevices(
-                                deviceType: dev['type'] ?? '',
-                                devicePart: dev['name'] ?? '',
-                                iconPath: iconPath,
-                                status: statusMap[dev['id']] ?? true,
-                                onChanged: (value) =>
-                                    powerSwitchChanged(value, dev['id']),
-                              ),
                             );
                           },
                         );

@@ -11,6 +11,8 @@ class WeatherService {
   String? cityName;
   String? stateName;
 
+  get weatherId => null;
+
   // Fetch city from Firestore
   Future<void> fetchData() async {
     final userEmail = FirebaseAuth.instance.currentUser?.email;

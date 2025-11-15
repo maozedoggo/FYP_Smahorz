@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/schedule_pages/schedule.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 class DeviceControlPage extends StatefulWidget {
   final String deviceId;
@@ -22,18 +23,57 @@ class DeviceControlPage extends StatefulWidget {
 class _DeviceControlPageState extends State<DeviceControlPage> {
   bool isUnlocked = false;
   String? householdUid;
+  final DatabaseReference _realtimeDB = FirebaseDatabase.instance.ref();
+  String _currentStatus = "Unknown";
 
   @override
   void initState() {
     super.initState();
     _loadHouseholdUid();
+    _setupRealtimeListener();
+  }
+
+  void _setupRealtimeListener() {
+    // Listen to motor status
+    _realtimeDB.child('motor').onValue.listen((event) {
+      if (event.snapshot.exists) {
+        final status = event.snapshot.value;
+        setState(() {
+          isUnlocked = status == true;
+          _currentStatus = status == true ? "Extended" : "Retracted";
+        });
+      }
+    });
+
+    // Listen to hanger status for real-time updates
+    _realtimeDB.child('hanger/status').onValue.listen((event) {
+      if (event.snapshot.exists) {
+        final status = event.snapshot.value.toString();
+        setState(() {
+          _currentStatus = status;
+          if (status.contains('extending')) {
+            _currentStatus = "Extending...";
+          } else if (status.contains('retracting')) {
+            _currentStatus = "Retracting...";
+          } else if (status.contains('extended')) {
+            _currentStatus = "Extended";
+            isUnlocked = true;
+          } else if (status.contains('retracted')) {
+            _currentStatus = "Retracted";
+            isUnlocked = false;
+          }
+        });
+      }
+    });
   }
 
   void toggleUnlock() {
     setState(() {
       isUnlocked = !isUnlocked;
-      // Here you can also update Firebase using widget.deviceId if needed
     });
+    
+    // Control clothes hanger via Realtime Database
+    _realtimeDB.child('motor').set(isUnlocked);
   }
 
   Future<void> _loadHouseholdUid() async {
@@ -49,7 +89,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
           householdUid = userDoc['householdId'];
         });
       } else {
-        // Handle case where householdId is missing
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Household ID not found.")),
         );
@@ -106,9 +145,15 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                 "Type: ${widget.deviceType}",
                 style: const TextStyle(color: Colors.white70, fontSize: 16),
               ),
+              
+              // Current status
+              Text(
+                "Status: $_currentStatus",
+                style: const TextStyle(color: Colors.white70, fontSize: 16),
+              ),
               const SizedBox(height: 40),
 
-              // Unlock/Lock button
+              // Extend/Retract button
               SizedBox(
                 width: 200,
                 height: 60,
@@ -121,9 +166,8 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                     ),
                   ),
                   child: Text(
-                    isUnlocked ? "Lock" : "Unlock",
-                    style:
-                        const TextStyle(color: Colors.white, fontSize: 20),
+                    isUnlocked ? "RETRACT" : "EXTEND",
+                    style: const TextStyle(color: Colors.white, fontSize: 20),
                   ),
                 ),
               ),
@@ -132,7 +176,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
               // Navigate to Schedule Page
               ElevatedButton.icon(
                 onPressed: householdUid == null
-                    ? null // Disable button until householdUid is loaded
+                    ? null
                     : () {
                         Navigator.push(
                           context,
@@ -147,18 +191,15 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                         );
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      householdUid == null ? Colors.grey : Colors.white,
+                  backgroundColor: householdUid == null ? Colors.grey : Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                icon: const Icon(Icons.calendar_month,
-                    color: Colors.black),
+                icon: const Icon(Icons.calendar_month, color: Colors.black),
                 label: const Text(
                   "Add Schedule",
-                  style: TextStyle(
-                      color: Colors.black, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
