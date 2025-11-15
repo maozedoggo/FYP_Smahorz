@@ -1,5 +1,5 @@
 name: smart_horizon_home
-description: "A new Flutter project."
+description: "A smart home management application with Firebase integration."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -23,6 +23,7 @@ dependencies:
   cloud_firestore: ^5.0.0
   firebase_storage: ^12.1.0
   firebase_messaging: ^15.0.2
+  firebase_database: ^11.3.10
 
   # State management
   provider: ^6.1.2
