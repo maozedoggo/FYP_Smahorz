@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // For Date
 import 'package:smart_horizon_home/views/pages/create_account_page/create_account.dart';
 
 // ===== Districts for each state =====
@@ -208,7 +207,6 @@ class _SignUpPageState extends State<SignUpPage> {
   String? selectedCountry;
   String? selectedState;
   String? selectedDistrict;
-  DateTime? selectedDOB;
 
   // Lists
   final List<String> countryCodes = ['+60', '+1', '+44', '+61', '+91', '+65'];
@@ -256,14 +254,6 @@ class _SignUpPageState extends State<SignUpPage> {
     return null;
   }
 
-  String? _validatePhone(String? value) {
-    if (value == null || value.isEmpty) return 'Please enter your phone number';
-    if (!RegExp(r'^\d+$').hasMatch(value)) {
-      return 'Phone number can only contain digits';
-    }
-    return null;
-  }
-
   String? _validateEmail(String? value) {
     if (value == null || value.isEmpty) return 'Please enter your email';
     if (!RegExp(r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,4}$').hasMatch(value)) {
@@ -285,11 +275,6 @@ class _SignUpPageState extends State<SignUpPage> {
     return null;
   }
 
-  String? _validateCountry(String? value) {
-    if (value == null || value.isEmpty) return 'Please enter your country';
-    return null;
-  }
-
   String? _validateState(String? value) {
     if (value == null || value.isEmpty) return 'Please select your state';
     return null;
@@ -300,59 +285,31 @@ class _SignUpPageState extends State<SignUpPage> {
     return null;
   }
 
-  String? _validateDOB(DateTime? value) {
-    if (value == null) return 'Please select your date of birth';
-    if (value.isAfter(DateTime.now())) {
-      return 'Date of birth cannot be in the future';
-    }
-    return null;
-  }
-
-  // ===== Date Picker =====
-  Future<void> _pickDateOfBirth() async {
-    final initialDate = DateTime.now().subtract(const Duration(days: 365 * 20));
-    final newDate = await showDatePicker(
-      context: context,
-      initialDate: selectedDOB ?? initialDate,
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-    );
-    if (newDate != null) setState(() => selectedDOB = newDate);
-  }
-
   // ===== Next Action =====
   void createaccount() {
     final nameError = _validateName(nameController.text);
-    final phoneError = _validatePhone(phoneController.text);
     final emailError = _validateEmail(emailController.text);
     final addrError = _validateAddressLine1(addressLine1Controller.text);
     final postalError = _validatePostalCode(postalCodeController.text);
-    final countryError = _validateCountry(countryController.text);
     final stateError = _validateState(selectedState);
     final districtError = _validateDistrict(selectedDistrict);
-    final dobError = _validateDOB(selectedDOB);
 
     if (nameError != null ||
-        phoneError != null ||
         emailError != null ||
         addrError != null ||
         postalError != null ||
-        countryError != null ||
         stateError != null ||
-        districtError != null ||
-        dobError != null) {
+        districtError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             nameError ??
-                phoneError ??
                 emailError ??
                 addrError ??
                 postalError ??
-                countryError ??
                 stateError ??
                 districtError ??
-                dobError!,
+                "Please fix the highlighted fields",
           ),
         ),
       );
@@ -366,15 +323,12 @@ class _SignUpPageState extends State<SignUpPage> {
       MaterialPageRoute(
         builder: (context) => CreateAccount(
           name: nameController.text,
-          phone: '$selectedCountryCode ${phoneController.text}',
           email: emailController.text,
           addressLine1: addressLine1Controller.text,
           addressLine2: addressLine2Controller.text,
           postalCode: postalCodeController.text,
           state: selectedState!,
           district: selectedDistrict!,
-          country: selectedCountry!,
-          dob: selectedDOB!,
         ),
       ),
     );
@@ -382,14 +336,11 @@ class _SignUpPageState extends State<SignUpPage> {
 
   @override
   Widget build(BuildContext context) {
-    final dobText = selectedDOB == null
-        ? 'Select Date of Birth'
-        : DateFormat('yyyy-MM-dd').format(selectedDOB!);
-
     return Scaffold(
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
+            backgroundColor: Colors.transparent,
             automaticallyImplyLeading: false,
             pinned: false,
             expandedHeight: 200,
@@ -420,7 +371,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           backgroundColor: Colors.white.withAlpha(30),
                           child: IconButton(
                             icon: const Icon(
-                              Icons.arrow_back,
+                              Icons.arrow_back_ios_new,
                               color: Colors.white,
                             ),
                             onPressed: () => Navigator.pop(context),
@@ -474,39 +425,6 @@ class _SignUpPageState extends State<SignUpPage> {
                         border: OutlineInputBorder(),
                       ),
                       maxLength: 40,
-                    ),
-                    const SizedBox(height: 16),
-
-                    const Text(
-                      "PHONE",
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        DropdownButton<String>(
-                          value: selectedCountryCode,
-                          items: countryCodes
-                              .map(
-                                (c) =>
-                                    DropdownMenuItem(value: c, child: Text(c)),
-                              )
-                              .toList(),
-                          onChanged: (v) =>
-                              setState(() => selectedCountryCode = v ?? '+60'),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: phoneController,
-                            decoration: const InputDecoration(
-                              hintText: "Phone Number",
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.phone,
-                          ),
-                        ),
-                      ],
                     ),
                     const SizedBox(height: 16),
 
@@ -614,39 +532,7 @@ class _SignUpPageState extends State<SignUpPage> {
                       ),
                       keyboardType: TextInputType.number,
                     ),
-                    const SizedBox(height: 16),
-
-                    const Text(
-                      "COUNTRY",
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: countryController,
-                      decoration: const InputDecoration(
-                        hintText: "Country",
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) =>
-                          setState(() => selectedCountry = value),
-                    ),
-                    const SizedBox(height: 16),
-
-                    const Text(
-                      "DATE OF BIRTH",
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(child: Text(dobText)),
-                        TextButton(
-                          onPressed: _pickDateOfBirth,
-                          child: const Text('Select'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 20),
 
                     SizedBox(
                       width: double.infinity,

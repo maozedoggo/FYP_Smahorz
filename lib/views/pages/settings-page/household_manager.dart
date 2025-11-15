@@ -38,7 +38,9 @@ class _HouseholdManagerState extends State<HouseholdManager> {
       if (userData == null) return;
 
       final householdId = userData['householdId'];
-      final isAdmin = userData['isAdmin'] ?? false;
+      // Consider owner as having admin UI privileges (ability to invite/manage members)
+      final isAdmin =
+          (userData['isAdmin'] ?? false) || (userData['role'] == 'owner');
 
       if (householdId == null || householdId.isEmpty) {
         setState(() {

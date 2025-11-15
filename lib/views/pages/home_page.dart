@@ -10,6 +10,7 @@ import 'package:smart_horizon_home/views/pages/smart-devices/device_page.dart';
 import 'package:smart_horizon_home/views/pages/profile-page/profile_page.dart';
 import 'package:smart_horizon_home/views/pages/settings-page/settings_page.dart';
 import 'package:smart_horizon_home/views/pages/login/login_page.dart';
+import 'package:smart_horizon_home/views/pages/smart-devices/qr_scanner.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -150,33 +151,50 @@ class _HomePageState extends State<HomePage> {
     }
 
     final controller = TextEditingController();
-    final res = await showDialog<bool>(
+    final res = await showDialog<String?>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Insert Your Device ID'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'Device ID'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Insert Your Device ID'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(hintText: 'Device ID'),
           ),
-          ElevatedButton(
-            onPressed: () {
-              final id = controller.text.trim();
-              if (id.isEmpty) return;
-              Navigator.pop(context, true);
-              _addDeviceById(id);
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, "scan"),
+              child: const Text('Scan QR'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final id = controller.text.trim();
+                if (id.isEmpty) return;
+                Navigator.pop(context, id);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
     );
 
-    if (res == true) await _loadUserDevices();
+    if (res == "scan") {
+      // Navigate to QR scanner page
+      final scannedId = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const QRScannerPage()),
+      );
+
+      if (scannedId != null && scannedId.toString().isNotEmpty) {
+        _addDeviceById(scannedId.toString());
+      }
+    } else if (res != null && res.isNotEmpty) {
+      _addDeviceById(res);
+    }
   }
 
   Future<bool> _isUserInHousehold() async {
@@ -211,9 +229,9 @@ class _HomePageState extends State<HomePage> {
         _cityName = weatherAPI.cityName ?? "Unknown";
         _temp = weatherAPI.currentTemp;
         _weatherLabel =
-            (weatherAPI.weatherMain ??
+            weatherAPI.weatherMain ??
             weatherAPI.weatherDescription ??
-            "Weather");
+            "Weather";
         _isLoadingWeather = false;
       });
     } catch (e) {
@@ -222,41 +240,31 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // Map OpenWeather condition id to a Google Material Symbols SVG
   Widget _weatherIconForId(int id, {double size = 24.0}) {
     String svgPath;
-
-    switch (id) {
-      case >= 200 && < 300:
-        svgPath = 'lib/icons/weather/thunderstorm.svg'; // thunderstorm
-        break;
-      case >= 300 && < 500:
-        svgPath = 'lib/icons/weather/rainy.svg'; // drizzle
-        break;
-      case >= 500 && < 600:
-        svgPath = 'lib/icons/weather/rainy.svg'; // rain
-        break;
-      case >= 600 && < 700:
-        svgPath = 'lib/icons/weather/snowy.svg'; // snow
-        break;
-      case >= 700 && < 800:
-        svgPath = 'lib/icons/weather/foggy.svg'; // atmosphere: mist, smoke, fog
-        break;
-      case 800:
-        svgPath = 'lib/icons/weather/sunny.svg'; // clear
-        break;
-      case > 800 && < 900:
-        svgPath = 'lib/icons/weather/cloudy.svg'; // clouds
-        break;
-      default:
-        svgPath = 'lib/icons/weather/cloudy.svg'; // default
+    if (id >= 200 && id < 300) {
+      svgPath = 'lib/icons/weather/thunderstorm.svg';
+    } else if (id >= 300 && id < 500) {
+      svgPath = 'lib/icons/weather/rainy.svg';
+    } else if (id >= 500 && id < 600) {
+      svgPath = 'lib/icons/weather/rainy.svg';
+    } else if (id >= 600 && id < 700) {
+      svgPath = 'lib/icons/weather/snowy.svg';
+    } else if (id >= 700 && id < 800) {
+      svgPath = 'lib/icons/weather/foggy.svg';
+    } else if (id == 800) {
+      svgPath = 'lib/icons/weather/sunny.svg';
+    } else if (id > 800 && id < 900) {
+      svgPath = 'lib/icons/weather/cloudy.svg';
+    } else {
+      svgPath = 'lib/icons/weather/cloudy.svg';
     }
 
     return SvgPicture.asset(
       svgPath,
       width: size,
       height: size,
-      color: Colors.white, // Make the SVG white to match your theme
+      color: Colors.white,
     );
   }
 
@@ -318,7 +326,6 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Drawer items
                         ListTile(
                           onTap: () => drawerController.hideDrawer(),
                           leading: const Icon(Icons.home),
@@ -327,7 +334,6 @@ class _HomePageState extends State<HomePage> {
                         ListTile(
                           onTap: () async {
                             drawerController.hideDrawer();
-                            // await navigation and refresh devices when user returns
                             await Navigator.push(
                               context,
                               MaterialPageRoute(builder: (_) => ProfilePage()),
@@ -451,8 +457,7 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                   ),
-
-                  // Welcome Text
+                  // Welcome Text & username
                   Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: horizontalPadding,
@@ -531,7 +536,6 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                   ),
-
                   Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: horizontalPadding,
@@ -539,7 +543,6 @@ class _HomePageState extends State<HomePage> {
                     ),
                     child: Divider(thickness: 3, color: Colors.white38),
                   ),
-
                   // Weather Card
                   Padding(
                     padding: EdgeInsets.symmetric(
@@ -548,17 +551,17 @@ class _HomePageState extends State<HomePage> {
                     ),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Color.fromRGBO(255, 255, 255, 0.15),
+                        color: const Color.fromRGBO(255, 255, 255, 0.15),
                         borderRadius: BorderRadius.circular(screenWidth * 0.05),
                         border: Border.all(
-                          color: Color.fromRGBO(255, 255, 255, 0.1),
+                          color: const Color.fromRGBO(255, 255, 255, 0.1),
                           width: 1,
                         ),
-                        boxShadow: [
+                        boxShadow: const [
                           BoxShadow(
-                            color: const Color.fromRGBO(255, 255, 255, 0.15),
+                            color: Color.fromRGBO(255, 255, 255, 0.15),
                             blurRadius: 8,
-                            offset: const Offset(0, 4),
+                            offset: Offset(0, 4),
                           ),
                         ],
                       ),
@@ -575,7 +578,6 @@ class _HomePageState extends State<HomePage> {
                           : Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                // dynamic weather icon and label - UPDATED WITH SVG
                                 _weatherIconForId(
                                   weatherAPI.statusID,
                                   size: screenWidth * 0.15,
@@ -585,9 +587,7 @@ class _HomePageState extends State<HomePage> {
                                   children: [
                                     ConstrainedBox(
                                       constraints: BoxConstraints(
-                                        maxWidth:
-                                            screenWidth *
-                                            0.25, // Limit width for text
+                                        maxWidth: screenWidth * 0.25,
                                       ),
                                       child: Text(
                                         _weatherLabel,
@@ -595,9 +595,8 @@ class _HomePageState extends State<HomePage> {
                                           fontSize: subtitleFontSize,
                                           color: Colors.white,
                                         ),
-                                        maxLines: 1, // Allow up to 2 lines
-                                        overflow: TextOverflow
-                                            .ellipsis, // Add ellipsis if too long
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                     Text(
@@ -656,7 +655,6 @@ class _HomePageState extends State<HomePage> {
                             ),
                     ),
                   ),
-
                   // Devices Grid
                   Expanded(
                     child: ValueListenableBuilder<Map<String, bool>>(

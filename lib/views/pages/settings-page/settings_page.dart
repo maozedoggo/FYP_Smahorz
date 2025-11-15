@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:smart_horizon_home/views/pages/settings-page/edit_address_page.dart';
-import 'member_profile_page.dart';
 import 'household_voting.dart';
 
 /// Redesigned SettingsPage (dark theme + card UI)
@@ -267,10 +266,10 @@ class _SettingsPageState extends State<SettingsPage> {
   // ---------- Save household info (admin only) ----------
   Future<void> _saveHouseholdInfo() async {
     if (householdDocRef == null) return;
-    // Only admins can edit household info now.
-    if (userRole != 'admin') {
+    // Only admins or owner can edit household info now.
+    if (!_isAdmin) {
       _showInfo(
-        "You don't have permission to edit. Only admins can edit household information.",
+        "You don't have permission to edit. Only admins or the owner can edit household information.",
       );
       return;
     }
@@ -303,9 +302,9 @@ class _SettingsPageState extends State<SettingsPage> {
   // ---------- Invite member (by email) ----------
   Future<void> _sendInvite() async {
     if (householdId == null || currentEmail == null) return;
-    // Only admins can invite now.
-    if (userRole != 'admin') {
-      _showInfo("Only household admins can invite members.");
+    // Allow admins or owner to invite members.
+    if (!_isAdmin) {
+      _showInfo("Only household admins or the owner can invite members.");
       return;
     }
 
@@ -605,7 +604,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     Text(
                       householdAddressText,
                       style: const TextStyle(
-                        color: Colors.white70,
+                        color: Colors.white,
                         fontSize: 14,
                       ),
                     ),
@@ -663,7 +662,7 @@ class _SettingsPageState extends State<SettingsPage> {
               },
               icon: const Icon(Icons.edit_location_alt, color: Colors.white),
               label: const Text(
-                "Edit Personal Address",
+                "Edit Address",
                 style: TextStyle(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
@@ -692,10 +691,10 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 12),
           TextField(
             controller: _nameCtrl,
-            enabled: canEdit && !isSavingHousehold,
+            enabled: false,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.home),
+              prefixIcon: const Icon(Icons.home, color: Color.fromRGBO(170, 170, 170, 1)),
               labelText: "Household Name",
               labelStyle: TextStyle(color: Colors.grey.shade300),
               filled: true,
@@ -708,11 +707,11 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 12),
           TextField(
             controller: _addressCtrl,
-            enabled: canEdit && !isSavingHousehold,
+            enabled: false,
             style: const TextStyle(color: Colors.white),
             maxLines: 2,
             decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.location_on),
+              prefixIcon: const Icon(Icons.location_on, color: Color.fromRGBO(170, 170, 170, 1),),
               labelText: "Address",
               labelStyle: TextStyle(color: Colors.grey.shade300),
               filled: true,

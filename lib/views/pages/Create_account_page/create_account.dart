@@ -5,28 +5,22 @@ import 'package:smart_horizon_home/views/pages/login/login_page.dart';
 
 class CreateAccount extends StatefulWidget {
   final String name;
-  final String phone;
   final String email;
   final String addressLine1;
   final String addressLine2;
   final String postalCode;
   final String state;
   final String district;
-  final String country;
-  final DateTime dob;
 
   const CreateAccount({
     super.key,
     required this.name,
-    required this.phone,
     required this.email,
     required this.addressLine1,
     required this.addressLine2,
     required this.postalCode,
     required this.state,
     required this.district,
-    required this.country,
-    required this.dob,
   });
 
   @override
@@ -138,14 +132,11 @@ class CreateAccountState extends State<CreateAccount> {
             'username': usernameController.text.trim(),
             'name': widget.name,
             'email': widget.email,
-            'phone': widget.phone,
             'addressLine1': widget.addressLine1,
             'addressLine2': widget.addressLine2,
             'postalCode': widget.postalCode,
             'state': widget.state,
             'district': widget.district,
-            'country': widget.country,
-            'dob': widget.dob.toIso8601String(),
             'createdAt': FieldValue.serverTimestamp(),
           });
 
@@ -212,17 +203,12 @@ class CreateAccountState extends State<CreateAccount> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text("Name: ${widget.name}"),
-                        Text("Phone: ${widget.phone}"),
                         Text("Email: ${widget.email}"),
                         Text("Address Line 1: ${widget.addressLine1}"),
                         Text("Address Line 2: ${widget.addressLine2}"),
                         Text("Postal Code: ${widget.postalCode}"),
                         Text("State: ${widget.state}"),
                         Text("District: ${widget.district}"),
-                        Text("Country: ${widget.country}"),
-                        Text(
-                          "Date of Birth: ${widget.dob.toLocal().toString().split(' ')[0]}",
-                        ),
                       ],
                     ),
                   ),
@@ -250,6 +236,21 @@ class CreateAccountState extends State<CreateAccount> {
                         ),
                       ),
                       const SizedBox(height: 16),
+
+                      // Password instructions
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: Text(
+                            'Password must be at least 8 characters, contain 1 uppercase, 1 lowercase, and 1 special character.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
+                      ),
 
                       // Password
                       TextField(
