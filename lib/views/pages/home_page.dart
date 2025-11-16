@@ -105,19 +105,35 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   void _setupRealtimeListeners() {
+    print("Setting up realtime listeners for ${_devices.length} devices");
+
     // Listen to each device's status in the new structure
     for (final device in _devices) {
       final deviceId = device['id'];
-      _realtimeDB.child('devices/$deviceId/status').onValue.listen((event) {
-        if (event.snapshot.exists) {
-          final status = event.snapshot.value;
-          final bool isOn = status == true;
+      final path = 'devices/$deviceId/status';
+      print("Listening to: $path");
 
-          print("Realtime DB update - $deviceId: $isOn");
+      _realtimeDB
+          .child(path)
+          .onValue
+          .listen(
+            (event) {
+              if (event.snapshot.exists) {
+                final status = event.snapshot.value;
+                final bool isOn = status == true;
 
-          _deviceStatus.value = {..._deviceStatus.value, deviceId: isOn};
-        }
-      });
+                print("Realtime DB update received - $deviceId: $isOn");
+
+                // Update the device status
+                _deviceStatus.value = {..._deviceStatus.value, deviceId: isOn};
+              } else {
+                print("No data at path: $path");
+              }
+            },
+            onError: (error) {
+              print("Listener error for $deviceId: $error");
+            },
+          );
     }
   }
 
@@ -169,29 +185,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
       if (!mounted) return;
       setState(() => _devices = loaded);
       _deviceStatus.value = statusMap;
-      _setupRealtimeListeners(); // ADD THIS LINE
+
+      // Clear existing listeners and setup new ones
+      _setupRealtimeListeners();
     } catch (e) {
       debugPrint("Error loading household devices: $e");
     }
-  }
-
-  void _controlDevice(String deviceId, bool status) {
-    print("=== CONTROLLING DEVICE ===");
-    print("Device ID: $deviceId");
-    print("Switch Status: $status");
-    print("Sending to Realtime DB...");
-
-    _realtimeDB
-        .child(deviceId)
-        .set(status)
-        .then((_) {
-          print(
-            "✓ Successfully sent to Realtime Database: $deviceId = $status",
-          );
-        })
-        .catchError((error) {
-          print("✗ Error sending to Realtime Database: $error");
-        });
   }
 
   Future<void> _addDeviceById(String id) async {
@@ -258,6 +257,13 @@ class _HomePageState extends State<HomePage> with RouteAware {
       await deviceRef.update({
         'householdId': householdId,
         'addedAt': FieldValue.serverTimestamp(),
+      });
+
+      // --- NEW: Create Realtime Database entry ---
+      final deviceType = deviceData['type'] ?? 'Unknown';
+      await _realtimeDB.child('devices/$id').set({
+        'status': false,
+        'type': deviceType,
       });
 
       // --- 6️ Refresh UI ---
@@ -428,17 +434,34 @@ class _HomePageState extends State<HomePage> with RouteAware {
   // DEVICE CONTROL METHODS
   // ===========================================================================
   void powerSwitchChanged(bool value, String deviceId) {
-    print("Switch changed for $deviceId: $value");
+    print("=== SWITCH TOGGLED ===");
+    print("Device ID: $deviceId");
+    print("New Switch Status: $value");
+    print("Current device status map: ${_deviceStatus.value}");
 
-    // Update Realtime Database with new structure
+    // Update local state immediately for responsive UI
+    _deviceStatus.value = {..._deviceStatus.value, deviceId: value};
+
+    // Control the actual IoT device via Realtime Database
     _realtimeDB
         .child('devices/$deviceId/status')
         .set(value)
         .then((_) {
-          print("✓ Successfully updated device status: $deviceId = $value");
+          print(
+            "✓ Successfully sent to Realtime Database: devices/$deviceId/status = $value",
+          );
+
+          // Verify the write was successful by reading back
+          _realtimeDB.child('devices/$deviceId/status').get().then((snapshot) {
+            if (snapshot.exists) {
+              print("✓ Verification - Current value in DB: ${snapshot.value}");
+            }
+          });
         })
         .catchError((error) {
-          print("✗ Error updating device status: $error");
+          print("✗ Error sending to Realtime Database: $error");
+          // Revert local state on error
+          _deviceStatus.value = {..._deviceStatus.value, deviceId: !value};
         });
   }
 

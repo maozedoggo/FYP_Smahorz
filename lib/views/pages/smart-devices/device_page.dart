@@ -21,10 +21,9 @@ class DeviceControlPage extends StatefulWidget {
 }
 
 class _DeviceControlPageState extends State<DeviceControlPage> {
-  bool isUnlocked = false;
+  bool _deviceStatus = false;
   String? householdUid;
   final DatabaseReference _realtimeDB = FirebaseDatabase.instance.ref();
-  String _currentStatus = "Unknown";
 
   @override
   void initState() {
@@ -34,46 +33,38 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   }
 
   void _setupRealtimeListener() {
-    // Listen to motor status
-    _realtimeDB.child('motor').onValue.listen((event) {
+    // Listen to device status using the new structure
+    _realtimeDB.child('devices/${widget.deviceId}/status').onValue.listen((event) {
       if (event.snapshot.exists) {
         final status = event.snapshot.value;
-        setState(() {
-          isUnlocked = status == true;
-          _currentStatus = status == true ? "Extended" : "Retracted";
-        });
-      }
-    });
-
-    // Listen to hanger status for real-time updates
-    _realtimeDB.child('hanger/status').onValue.listen((event) {
-      if (event.snapshot.exists) {
-        final status = event.snapshot.value.toString();
-        setState(() {
-          _currentStatus = status;
-          if (status.contains('extending')) {
-            _currentStatus = "Extending...";
-          } else if (status.contains('retracting')) {
-            _currentStatus = "Retracting...";
-          } else if (status.contains('extended')) {
-            _currentStatus = "Extended";
-            isUnlocked = true;
-          } else if (status.contains('retracted')) {
-            _currentStatus = "Retracted";
-            isUnlocked = false;
-          }
-        });
+        if (mounted) {
+          setState(() {
+            _deviceStatus = status == true;
+          });
+        }
+        print("Device status updated: ${widget.deviceId} = $_deviceStatus");
       }
     });
   }
 
-  void toggleUnlock() {
+  void _toggleDevice() {
+    final newStatus = !_deviceStatus;
     setState(() {
-      isUnlocked = !isUnlocked;
+      _deviceStatus = newStatus;
     });
     
-    // Control clothes hanger via Realtime Database
-    _realtimeDB.child('motor').set(isUnlocked);
+    // Control device via Realtime Database using new structure
+    _realtimeDB.child('devices/${widget.deviceId}/status').set(newStatus)
+      .then((_) {
+        print("✓ Device control sent: ${widget.deviceId} = $newStatus");
+      })
+      .catchError((error) {
+        print("✗ Error controlling device: $error");
+        // Revert on error
+        setState(() {
+          _deviceStatus = !newStatus;
+        });
+      });
   }
 
   Future<void> _loadHouseholdUid() async {
@@ -98,6 +89,30 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
         SnackBar(content: Text("Error fetching household ID: $e")),
       );
     }
+  }
+
+  String _getStatusText() {
+    if (widget.deviceType.toLowerCase().contains('hanger') || 
+        widget.deviceType.toLowerCase().contains('clothe')) {
+      return _deviceStatus ? "Extended" : "Retracted";
+    }
+    return _deviceStatus ? "On" : "Off";
+  }
+
+  Color _getStatusColor() {
+    return _deviceStatus ? Colors.green : Colors.red;
+  }
+
+  String _getButtonText() {
+    if (widget.deviceType.toLowerCase().contains('hanger') || 
+        widget.deviceType.toLowerCase().contains('clothe')) {
+      return _deviceStatus ? "RETRACT" : "EXTEND";
+    }
+    return _deviceStatus ? "TURN OFF" : "TURN ON";
+  }
+
+  Color _getButtonColor() {
+    return _deviceStatus ? Colors.red : Colors.green;
   }
 
   @override
@@ -148,25 +163,29 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
               
               // Current status
               Text(
-                "Status: $_currentStatus",
-                style: const TextStyle(color: Colors.white70, fontSize: 16),
+                "Status: ${_getStatusText()}",
+                style: TextStyle(
+                  color: _getStatusColor(),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 40),
 
-              // Extend/Retract button
+              // Control button
               SizedBox(
                 width: 200,
                 height: 60,
                 child: ElevatedButton(
-                  onPressed: toggleUnlock,
+                  onPressed: _toggleDevice,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isUnlocked ? Colors.red : Colors.green,
+                    backgroundColor: _getButtonColor(),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   child: Text(
-                    isUnlocked ? "RETRACT" : "EXTEND",
+                    _getButtonText(),
                     style: const TextStyle(color: Colors.white, fontSize: 20),
                   ),
                 ),
