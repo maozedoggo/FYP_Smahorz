@@ -5,8 +5,9 @@ import 'package:smart_horizon_home/views/pages/login/login_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   await FCMService().initialize();
-  await Firebase.initializeApp(); //Initialize Firebase
+   //Initialize Firebase
   runApp(const SmartHomeApp());
 }
 
