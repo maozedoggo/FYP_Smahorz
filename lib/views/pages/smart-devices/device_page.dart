@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/schedule_pages/schedule.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -23,62 +25,116 @@ class DeviceControlPage extends StatefulWidget {
 class _DeviceControlPageState extends State<DeviceControlPage> {
   bool _deviceStatus = false;
   String? householdUid;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final DatabaseReference _realtimeDB = FirebaseDatabase.instance.ref();
+  StreamSubscription<DatabaseEvent>? _deviceSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadHouseholdUid();
-    _setupRealtimeListener();
   }
 
-  void _setupRealtimeListener() {
-    // Listen to device status using the new structure
-    _realtimeDB.child('devices/${widget.deviceId}/status').onValue.listen((event) {
-      if (event.snapshot.exists) {
+  @override
+  void dispose() {
+    _deviceSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupRealtimeListener(String householdId) {
+    final path = '$householdId/${widget.deviceId}/status';
+    print("DeviceControlPage listening to: $path");
+
+    _deviceSubscription = _realtimeDB
+        .child(path)
+        .onValue
+        .listen((DatabaseEvent event) {
+      if (event.snapshot.exists && mounted) {
         final status = event.snapshot.value;
-        if (mounted) {
-          setState(() {
-            _deviceStatus = status == true;
-          });
-        }
-        print("Device status updated: ${widget.deviceId} = $_deviceStatus");
+        final bool isOn = status == true;
+        
+        setState(() {
+          _deviceStatus = isOn;
+        });
+        
+        print("DeviceControlPage update: ${widget.deviceId} = $isOn");
       }
+    }, onError: (error) {
+      print("DeviceControlPage listener error: $error");
     });
   }
 
-  void _toggleDevice() {
+  void _toggleDevice() async {
+    if (householdUid == null) {
+      print("No household ID available");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Household ID not found.")),
+      );
+      return;
+    }
+
     final newStatus = !_deviceStatus;
     setState(() {
       _deviceStatus = newStatus;
     });
     
-    // Control device via Realtime Database using new structure
-    _realtimeDB.child('devices/${widget.deviceId}/status').set(newStatus)
-      .then((_) {
-        print("✓ Device control sent: ${widget.deviceId} = $newStatus");
-      })
-      .catchError((error) {
-        print("✗ Error controlling device: $error");
-        // Revert on error
-        setState(() {
-          _deviceStatus = !newStatus;
-        });
+    try {
+      print("=== DEVICE CONTROL PAGE - TOGGLING DEVICE ===");
+      print("Device ID: ${widget.deviceId}");
+      print("Household ID: $householdUid");
+      print("New Status: $newStatus");
+
+      // Update Firestore
+      await _firestore
+          .collection('devices')
+          .doc(widget.deviceId)
+          .update({
+            'status': newStatus,
+            'lastUpdated': FieldValue.serverTimestamp(),
+          });
+      print("✓ DeviceControlPage updated Firestore");
+
+      // Update Realtime Database under household
+      await _realtimeDB
+          .child('$householdUid/${widget.deviceId}/status')
+          .set(newStatus);
+      print("✓ DeviceControlPage updated Realtime DB: $householdUid/${widget.deviceId}/status = $newStatus");
+
+      // Verify the write
+      final snapshot = await _realtimeDB.child('$householdUid/${widget.deviceId}/status').get();
+      if (snapshot.exists) {
+        print("✓ Verification - Current value in Realtime DB: ${snapshot.value}");
+      } else {
+        print("✗ Verification failed - No data at path");
+      }
+
+    } catch (error) {
+      print("✗ Error controlling device: $error");
+      // Revert on error
+      setState(() {
+        _deviceStatus = !newStatus;
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error controlling device: $error")),
+      );
+    }
   }
 
   Future<void> _loadHouseholdUid() async {
     try {
       final userEmail = FirebaseAuth.instance.currentUser!.email!;
-      final userDoc = await FirebaseFirestore.instance
+      final userDoc = await _firestore
           .collection('users')
           .doc(userEmail)
           .get();
 
       if (userDoc.exists && userDoc.data()!.containsKey('householdId')) {
+        final householdId = userDoc['householdId'];
         setState(() {
-          householdUid = userDoc['householdId'];
+          householdUid = householdId;
         });
+        _setupRealtimeListener(householdId);
+        print("DeviceControlPage loaded household: $householdId");
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Household ID not found.")),

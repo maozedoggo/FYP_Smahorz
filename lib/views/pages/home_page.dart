@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -32,6 +34,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   // DEPENDENCIES & SERVICES
   // ===========================================================================
   final WeatherService weatherAPI = WeatherService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final DatabaseReference _realtimeDB = FirebaseDatabase.instance.ref();
 
   // ===========================================================================
@@ -48,6 +51,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
   // ===========================================================================
   List<Map<String, dynamic>> _devices = [];
   final ValueNotifier<Map<String, bool>> _deviceStatus = ValueNotifier({});
+  bool _isAddingDevice = false; // Loading state for adding device
+
+  // Store subscriptions so we can cancel them on dispose
+  Map<String, StreamSubscription<DocumentSnapshot>> _deviceSubscriptions = {};
 
   // ===========================================================================
   // LIFECYCLE METHODS
@@ -57,14 +64,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
     super.initState();
     _loadWeather();
     _loadUserDevices();
-    _setupRealtimeListeners();
-    _testRealtimeDB();
+    _testRealtimeDBConnection();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // subscribe to route events so we can refresh when returning to this page
     final modal = ModalRoute.of(context);
     if (modal != null) {
       routeObserver.subscribe(this, modal);
@@ -73,6 +78,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   @override
   void dispose() {
+    // Cancel all device subscriptions
+    for (final sub in _deviceSubscriptions.values) {
+      sub.cancel();
+    }
+    _deviceSubscriptions.clear();
+
     // unsubscribe from route events
     try {
       routeObserver.unsubscribe(this);
@@ -82,58 +93,173 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   @override
   void didPopNext() {
-    // Called when a pushed route has been popped and this route shows again.
-    // Refresh devices (and weather) to ensure UI is up-to-date when returning.
     _loadUserDevices();
     _loadWeather();
     super.didPopNext();
   }
 
   // ===========================================================================
-  // FIREBASE REALTIME DATABASE METHODS
+  // FIRESTORE METHODS
   // ===========================================================================
-  void _testRealtimeDB() {
-    _realtimeDB
-        .child('test')
-        .set(DateTime.now().toString())
-        .then((_) {
-          print("✓ Realtime Database connection test: SUCCESS");
-        })
-        .catchError((error) {
-          print("✗ Realtime Database connection test: FAILED - $error");
-        });
-  }
+  void _setupFirestoreListeners() {
+    print("Setting up Firestore listeners for ${_devices.length} devices");
 
-  void _setupRealtimeListeners() {
-    print("Setting up realtime listeners for ${_devices.length} devices");
+    // Cancel old subscriptions first
+    for (final sub in _deviceSubscriptions.values) {
+      sub.cancel();
+    }
+    _deviceSubscriptions.clear();
 
-    // Listen to each device's status in the new structure
+    // Listen to each device's status in Firestore
     for (final device in _devices) {
       final deviceId = device['id'];
-      final path = 'devices/$deviceId/status';
-      print("Listening to: $path");
+      print("Listening to Firestore document: devices/$deviceId");
+
+      final subscription = _firestore
+          .collection('devices')
+          .doc(deviceId)
+          .snapshots()
+          .listen(
+            (documentSnapshot) {
+              if (documentSnapshot.exists && mounted) {
+                final data = documentSnapshot.data();
+                if (data != null && data.containsKey('status')) {
+                  final bool isOn = data['status'] == true;
+
+                  print("Firestore update - $deviceId: $isOn");
+
+                  // Update the device status in the ValueNotifier
+                  _deviceStatus.value = {
+                    ..._deviceStatus.value,
+                    deviceId: isOn,
+                  };
+                }
+              }
+            },
+            onError: (error) {
+              print("Firestore listener error for $deviceId: $error");
+            },
+          );
+
+      // Store subscription for later cleanup
+      _deviceSubscriptions[deviceId] = subscription;
+    }
+  }
+
+  // ===========================================================================
+  // REALTIME DATABASE METHODS
+  // ===========================================================================
+  void _setupRealtimeDBListeners() async {
+    print("Setting up Realtime DB listeners for ${_devices.length} devices");
+
+    // Get household ID first
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final userDoc = await _firestore.collection('users').doc(user.email).get();
+
+    final householdId = userDoc.data()?['householdId'];
+    if (householdId == null) {
+      print("No household ID found for Realtime DB listeners");
+      return;
+    }
+
+    print("Realtime DB listeners using household: $householdId");
+
+    // Listen to each device's status in Realtime Database
+    for (final device in _devices) {
+      final deviceId = device['id'];
+      final path = '$householdId/$deviceId/status';
+      print("Listening to Realtime DB: $path");
 
       _realtimeDB
           .child(path)
           .onValue
           .listen(
-            (event) {
-              if (event.snapshot.exists) {
+            (DatabaseEvent event) {
+              if (event.snapshot.exists && mounted) {
                 final status = event.snapshot.value;
                 final bool isOn = status == true;
 
-                print("Realtime DB update received - $deviceId: $isOn");
+                print("Realtime DB update - $deviceId: $isOn");
 
-                // Update the device status
+                // Update the device status in the ValueNotifier
                 _deviceStatus.value = {..._deviceStatus.value, deviceId: isOn};
-              } else {
-                print("No data at path: $path");
               }
             },
             onError: (error) {
-              print("Listener error for $deviceId: $error");
+              print("Realtime DB listener error for $deviceId: $error");
             },
           );
+    }
+  }
+
+  void _testRealtimeDBConnection() async {
+    try {
+      final testPath = 'test_connection';
+      print("Testing Realtime DB connection...");
+
+      await _realtimeDB
+          .child(testPath)
+          .set({
+            'test': 'Hello from Flutter',
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          })
+          .then((_) {
+            print("✓ Realtime DB test write SUCCESS");
+
+            // Try to read it back
+            _realtimeDB.child(testPath).get().then((snapshot) {
+              if (snapshot.exists) {
+                print("✓ Realtime DB test read SUCCESS: ${snapshot.value}");
+              } else {
+                print("✗ Realtime DB test read FAILED");
+              }
+            });
+          })
+          .catchError((error) {
+            print("✗ Realtime DB test write FAILED: $error");
+          });
+    } catch (e) {
+      print("✗ Realtime DB test exception: $e");
+    }
+  }
+
+  Future<bool> _testRealtimeDBWrite(String householdId, String deviceId) async {
+    try {
+      final testPath = '$householdId/test_$deviceId';
+      final testData = {
+        'test': 'write_test',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      };
+
+      print("🧪 Testing Realtime DB write to: $testPath");
+      
+      await _realtimeDB.child(testPath).set(testData).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          print("❌ Realtime DB write test TIMEOUT");
+          return false;
+        },
+      );
+
+      // Verify the write
+      final snapshot = await _realtimeDB.child(testPath).once().timeout(
+        const Duration(seconds: 3),
+      );
+
+      if (snapshot.snapshot.exists) {
+        print("✅ Realtime DB write test SUCCESS");
+        // Clean up test data
+        await _realtimeDB.child(testPath).remove();
+        return true;
+      } else {
+        print("❌ Realtime DB write test FAILED - data not found");
+        return false;
+      }
+    } catch (e) {
+      print("❌ Realtime DB write test ERROR: $e");
+      return false;
     }
   }
 
@@ -145,7 +271,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final userDoc = await FirebaseFirestore.instance
+      final userDoc = await _firestore
           .collection('users')
           .doc(user.email)
           .get();
@@ -155,7 +281,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final householdId = userData['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return;
 
-      final householdDoc = await FirebaseFirestore.instance
+      final householdDoc = await _firestore
           .collection('households')
           .doc(householdId)
           .get();
@@ -168,10 +294,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final statusMap = <String, bool>{};
 
       for (final id in deviceIds) {
-        final d = await FirebaseFirestore.instance
-            .collection('devices')
-            .doc(id)
-            .get();
+        final d = await _firestore.collection('devices').doc(id).get();
         if (!d.exists) continue;
         final dd = d.data() ?? {};
         loaded.add({
@@ -179,15 +302,16 @@ class _HomePageState extends State<HomePage> with RouteAware {
           'name': dd['name'] ?? id,
           'type': dd['type'] ?? 'Unknown',
         });
-        statusMap[id] = dd['status'] ?? true;
+        statusMap[id] = dd['status'] ?? false;
       }
 
       if (!mounted) return;
       setState(() => _devices = loaded);
       _deviceStatus.value = statusMap;
 
-      // Clear existing listeners and setup new ones
-      _setupRealtimeListeners();
+      // Setup both Firestore and Realtime DB listeners
+      _setupFirestoreListeners();
+      _setupRealtimeDBListeners();
     } catch (e) {
       debugPrint("Error loading household devices: $e");
     }
@@ -196,27 +320,31 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Future<void> _addDeviceById(String id) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You must be logged in to add a device.'),
+          ),
+        );
+        return;
+      }
 
-      // --- 1️ Get device ---
-      final deviceRef = FirebaseFirestore.instance
-          .collection('devices')
-          .doc(id);
+      // --- 1️ Get device from Firestore ---
+      final deviceRef = _firestore.collection('devices').doc(id);
       final deviceDoc = await deviceRef.get();
 
       if (!deviceDoc.exists) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Device not found.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Device not found in the system.')),
+        );
         return;
       }
 
       final deviceData = deviceDoc.data() ?? {};
       final existingHouseholdId = deviceData['householdId'];
 
-      // --- 2️ If device already assigned to a household ---
-      if (existingHouseholdId != null &&
-          existingHouseholdId.toString().isNotEmpty) {
+      // --- 2️ Check if device already assigned to another household ---
+      if (existingHouseholdId != null && existingHouseholdId.toString().isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -227,11 +355,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
         return;
       }
 
-      // --- 3️ Get user household ID ---
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.email)
-          .get();
+      // --- 3️ Get user's household ID ---
+      final userDoc = await _firestore.collection('users').doc(user.email).get();
+      if (!userDoc.exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User profile not found.')),
+        );
+        return;
+      }
 
       final userData = userDoc.data() ?? {};
       final householdId = userData['householdId'];
@@ -239,46 +370,140 @@ class _HomePageState extends State<HomePage> with RouteAware {
       if (householdId == null || householdId.toString().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('You are not assigned to any household.'),
+            content: Text(
+              'You are not assigned to any household. Please contact administrator.',
+            ),
           ),
         );
         return;
       }
 
-      // --- 4️ Add device to household's device array ---
-      await FirebaseFirestore.instance
-          .collection('households')
-          .doc(householdId)
-          .set({
-            'devices': FieldValue.arrayUnion([id]),
-          }, SetOptions(merge: true));
+      // --- 4️ Verify household exists ---
+      final householdDoc = await _firestore.collection('households').doc(householdId).get();
+      if (!householdDoc.exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Your household does not exist.')),
+        );
+        return;
+      }
 
-      // --- 5️ Update device to mark it as assigned ---
+      print("=== ADDING DEVICE TO HOUSEHOLD ===");
+      print("Device ID: $id");
+      print("Household ID: $householdId");
+      print("User: ${user.email}");
+
+      // Show full page loading
+      if (mounted) {
+        setState(() {
+          _isAddingDevice = true;
+        });
+      }
+
+      // --- 5️ Add device to household's device array in Firestore ---
+      await _firestore.collection('households').doc(householdId).set({
+        'devices': FieldValue.arrayUnion([id]),
+      }, SetOptions(merge: true));
+
+      print("✓ Added device to household Firestore array");
+
+      // --- 6️ Update device document to mark it as assigned in Firestore ---
       await deviceRef.update({
         'householdId': householdId,
+        'status': false, // Initialize status to false
         'addedAt': FieldValue.serverTimestamp(),
       });
 
-      // --- NEW: Create Realtime Database entry ---
-      final deviceType = deviceData['type'] ?? 'Unknown';
-      await _realtimeDB.child('devices/$id').set({
-        'status': false,
-        'type': deviceType,
-      });
+      print("✓ Updated device Firestore document");
 
-      // --- 6️ Refresh UI ---
+      // --- 7️ CREATE REALTIME DATABASE ENTRY (SIMPLIFIED VERSION) ---
+      final deviceType = deviceData['type'] ?? 'Unknown';
+      final deviceName = deviceData['name'] ?? id;
+
+      final realtimePath = '$householdId/$id';
+      print("=== REALTIME DATABASE CREATION ===");
+      print("Path: $realtimePath");
+
+      // Test Realtime DB connection first
+      final canWriteToRTDB = await _testRealtimeDBWrite(householdId, id);
+
+      if (canWriteToRTDB) {
+        try {
+          print("🔄 Writing device data to Realtime Database...");
+          
+          // Write only the essential data first
+          await _realtimeDB.child('$realtimePath/status').set(false).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              throw TimeoutException("Realtime DB status write timeout");
+            },
+          );
+          
+          print("✅ Basic device status written to Realtime DB");
+
+          // Add additional device info with separate writes
+          await _realtimeDB.child('$realtimePath/type').set(deviceType);
+          await _realtimeDB.child('$realtimePath/name').set(deviceName);
+          await _realtimeDB.child('$realtimePath/addedAt').set(DateTime.now().millisecondsSinceEpoch);
+
+          print("✅ All device data written to Realtime DB");
+
+        } catch (e) {
+          print("❌ Error writing to Realtime DB: $e");
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Device added but Realtime Database setup had issues.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } else {
+        print("⚠️ Skipping Realtime DB setup due to connection issues");
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Device added but could not connect to Realtime Database.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+
+      // --- 8️ Refresh UI ---
+      print("Refreshing UI...");
       await _loadUserDevices();
+      print("✓ UI refreshed");
+
+      // Hide loading indicator
+      if (mounted) {
+        setState(() {
+          _isAddingDevice = false;
+        });
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Device added to household successfully.'),
+          content: Text('Device added to household successfully!'),
+          backgroundColor: Colors.green,
         ),
       );
+
+      print("=== DEVICE ADDITION COMPLETED ===");
+
     } catch (e) {
+      print("❌ ERROR IN _addDeviceById: $e");
       debugPrint('Error adding device: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error adding device: $e')));
+      
+      // Hide loading indicator on error
+      if (mounted) {
+        setState(() {
+          _isAddingDevice = false;
+        });
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error adding device: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -301,10 +526,20 @@ class _HomePageState extends State<HomePage> with RouteAware {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Insert Your Device ID'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(hintText: 'Device ID'),
+          title: const Text('Add New Device'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Enter your Device ID:'),
+              const SizedBox(height: 10),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  hintText: 'Device ID',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -318,10 +553,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
             ElevatedButton(
               onPressed: () {
                 final id = controller.text.trim();
-                if (id.isEmpty) return;
+                if (id.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a Device ID')),
+                  );
+                  return;
+                }
                 Navigator.pop(context, id);
               },
-              child: const Text('Add'),
+              child: const Text('Add Device'),
             ),
           ],
         );
@@ -335,10 +575,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
       );
 
       if (scannedId != null && scannedId.toString().isNotEmpty) {
-        _addDeviceById(scannedId.toString());
+        await _addDeviceById(scannedId.toString());
       }
     } else if (res != null && res.isNotEmpty) {
-      _addDeviceById(res);
+      await _addDeviceById(res);
     }
   }
 
@@ -347,14 +587,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return false;
     try {
-      final userDoc = await FirebaseFirestore.instance
+      final userDoc = await _firestore
           .collection('users')
           .doc(user.email)
           .get();
       if (!userDoc.exists) return false;
       final householdId = userDoc.data()?['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return false;
-      final householdDoc = await FirebaseFirestore.instance
+      final householdDoc = await _firestore
           .collection('households')
           .doc(householdId)
           .get();
@@ -433,36 +673,59 @@ class _HomePageState extends State<HomePage> with RouteAware {
   // ===========================================================================
   // DEVICE CONTROL METHODS
   // ===========================================================================
-  void powerSwitchChanged(bool value, String deviceId) {
+  void powerSwitchChanged(bool value, String deviceId) async {
     print("=== SWITCH TOGGLED ===");
     print("Device ID: $deviceId");
-    print("New Switch Status: $value");
-    print("Current device status map: ${_deviceStatus.value}");
+    print("New Status: $value");
 
-    // Update local state immediately for responsive UI
-    _deviceStatus.value = {..._deviceStatus.value, deviceId: value};
+    try {
+      // Get current user's household ID
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
 
-    // Control the actual IoT device via Realtime Database
-    _realtimeDB
-        .child('devices/$deviceId/status')
-        .set(value)
-        .then((_) {
-          print(
-            "✓ Successfully sent to Realtime Database: devices/$deviceId/status = $value",
-          );
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(user.email)
+          .get();
 
-          // Verify the write was successful by reading back
-          _realtimeDB.child('devices/$deviceId/status').get().then((snapshot) {
-            if (snapshot.exists) {
-              print("✓ Verification - Current value in DB: ${snapshot.value}");
-            }
-          });
-        })
-        .catchError((error) {
-          print("✗ Error sending to Realtime Database: $error");
-          // Revert local state on error
-          _deviceStatus.value = {..._deviceStatus.value, deviceId: !value};
-        });
+      final householdId = userDoc.data()?['householdId'];
+      if (householdId == null || householdId.toString().isEmpty) {
+        print("✗ No household ID found for user");
+        return;
+      }
+
+      print("Household ID: $householdId");
+
+      // Update local state for immediate UI response
+      _deviceStatus.value = {..._deviceStatus.value, deviceId: value};
+
+      // Update Firestore for data persistence
+      await _firestore.collection('devices').doc(deviceId).update({
+        'status': value,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+      print("✓ Updated Firestore: devices/$deviceId = $value");
+
+      // Update Realtime Database under household path
+      await _realtimeDB.child('$householdId/$deviceId/status').set(value);
+      print("✓ Updated Realtime DB: $householdId/$deviceId/status = $value");
+
+      // Verify the write
+      final snapshot = await _realtimeDB
+          .child('$householdId/$deviceId/status')
+          .get();
+      if (snapshot.exists) {
+        print(
+          "✓ Verification - Current value in Realtime DB: ${snapshot.value}",
+        );
+      } else {
+        print("✗ Verification failed - No data at path");
+      }
+    } catch (e) {
+      print("✗ Error controlling device: $e");
+      // Revert local state on error
+      _deviceStatus.value = {..._deviceStatus.value, deviceId: !value};
+    }
   }
 
   Widget _pageForDevice(Map<String, dynamic> device) {
@@ -488,10 +751,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.email)
-        .get();
+    final userDoc = await _firestore.collection('users').doc(user.email).get();
 
     final userData = userDoc.data() ?? {};
     final householdId = userData['householdId'];
@@ -499,9 +759,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
     if (householdId == null) return;
 
-    await FirebaseFirestore.instance
+    await _firestore
         .collection('households')
-        .doc(householdId) // household root
+        .doc(householdId)
         .collection('activityLogs')
         .add({
           'userId': user.uid,
@@ -530,460 +790,501 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
     return PopScope(
       canPop: false,
-      child: AdvancedDrawer(
-        controller: drawerController,
-        openScale: 0.7,
-        openRatio: 0.65,
-        animationCurve: Curves.easeInOutSine,
-        animateChildDecoration: true,
-        childDecoration: BoxDecoration(borderRadius: BorderRadius.circular(20)),
-        backdropColor: const Color.fromARGB(255, 22, 22, 22),
-        drawer: Container(
-          color: const Color.fromARGB(255, 36, 36, 36),
-          child: SafeArea(
-            child: ListTileTheme(
-              textColor: Colors.white,
-              iconColor: Colors.white,
-              child: Column(
-                mainAxisSize: MainAxisSize.max,
-                children: [
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ListTile(
-                          onTap: () => drawerController.hideDrawer(),
-                          leading: const Icon(Icons.home),
-                          title: const Text('Home'),
+      child: Stack(
+        children: [
+          AdvancedDrawer(
+            controller: drawerController,
+            openScale: 0.7,
+            openRatio: 0.65,
+            animationCurve: Curves.easeInOutSine,
+            animateChildDecoration: true,
+            childDecoration: BoxDecoration(borderRadius: BorderRadius.circular(20)),
+            backdropColor: const Color.fromARGB(255, 22, 22, 22),
+            drawer: Container(
+              color: const Color.fromARGB(255, 36, 36, 36),
+              child: SafeArea(
+                child: ListTileTheme(
+                  textColor: Colors.white,
+                  iconColor: Colors.white,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ListTile(
+                              onTap: _isAddingDevice ? null : () => drawerController.hideDrawer(),
+                              leading: const Icon(Icons.home),
+                              title: const Text('Home'),
+                            ),
+                            ListTile(
+                              onTap: _isAddingDevice ? null : () async {
+                                drawerController.hideDrawer();
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => ProfilePage()),
+                                );
+                                if (!mounted) return;
+                                await _loadUserDevices();
+                              },
+                              leading: const Icon(Icons.account_circle_rounded),
+                              title: const Text('Profile'),
+                            ),
+                            ListTile(
+                              onTap: _isAddingDevice ? null : () async {
+                                drawerController.hideDrawer();
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => SettingsPage()),
+                                );
+                                if (!mounted) return;
+                                await _loadUserDevices();
+                              },
+                              leading: const Icon(Icons.settings),
+                              title: const Text('Settings'),
+                            ),
+                          ],
                         ),
-                        ListTile(
-                          onTap: () async {
-                            drawerController.hideDrawer();
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => ProfilePage()),
-                            );
-                            if (!mounted) return;
-                            await _loadUserDevices();
-                          },
-                          leading: const Icon(Icons.account_circle_rounded),
-                          title: const Text('Profile'),
-                        ),
-                        ListTile(
-                          onTap: () async {
-                            drawerController.hideDrawer();
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => SettingsPage()),
-                            );
-                            if (!mounted) return;
-                            await _loadUserDevices();
-                          },
-                          leading: const Icon(Icons.settings),
-                          title: const Text('Settings'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: _signout,
-                      icon: Icon(
-                        Icons.logout_rounded,
-                        color: Colors.red[700],
-                        size: iconSize,
                       ),
-                      label: Text(
-                        "Logout",
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: _isAddingDevice ? null : _signout,
+                          icon: Icon(
+                            Icons.logout_rounded,
+                            color: Colors.red[700],
+                            size: iconSize,
+                          ),
+                          label: Text(
+                            "Logout",
+                            style: TextStyle(
+                              color: Colors.red[700],
+                              fontSize: subtitleFontSize,
+                            ),
+                          ),
+                        ),
+                      ),
+                      DefaultTextStyle(
                         style: TextStyle(
-                          color: Colors.red[700],
-                          fontSize: subtitleFontSize,
+                          fontSize: screenWidth * 0.03,
+                          color: Colors.white,
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 16.0),
+                          child: const Text('Smart Horizon Home'),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                  DefaultTextStyle(
-                    style: TextStyle(
-                      fontSize: screenWidth * 0.03,
-                      color: Colors.white,
-                    ),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 16.0),
-                      child: const Text('Smart Horizon Home'),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
-        child: Scaffold(
-          body: Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF0063A1),
-                  Color(0xFF0982BA),
-                  Color(0xFF04111C),
-                ],
-                stops: [0.21, 0.41, 1.0],
-              ),
-            ),
-            child: SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ===========================================================
-                  // TOP APP BAR
-                  // ===========================================================
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding - 10,
-                      vertical: verticalPadding,
-                    ),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            Icons.menu,
-                            size: iconSize,
-                            color: Colors.white,
-                          ),
-                          onPressed: () => drawerController.toggleDrawer(),
+            child: Scaffold(
+              body: Container(
+                width: double.infinity,
+                height: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFF0063A1),
+                      Color(0xFF0982BA),
+                      Color(0xFF04111C),
+                    ],
+                    stops: [0.21, 0.41, 1.0],
+                  ),
+                ),
+                child: SafeArea(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ===========================================================
+                      // TOP APP BAR
+                      // ===========================================================
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding - 10,
+                          vertical: verticalPadding,
                         ),
-                        const Spacer(),
-                        IconButton(
-                          icon: Icon(
-                            Icons.notifications,
-                            size: iconSize,
-                            color: Colors.white,
-                          ),
-                          onPressed: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => NotificationPage(),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                Icons.menu,
+                                size: iconSize,
+                                color: Colors.white,
                               ),
-                            );
-                            if (!mounted) return;
-                            await _loadUserDevices();
-                          },
+                              onPressed: _isAddingDevice ? null : () => drawerController.toggleDrawer(),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: Icon(
+                                Icons.notifications,
+                                size: iconSize,
+                                color: Colors.white,
+                              ),
+                              onPressed: _isAddingDevice ? null : () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => NotificationPage(),
+                                  ),
+                                );
+                                if (!mounted) return;
+                                await _loadUserDevices();
+                              },
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                Icons.add_circle,
+                                size: iconSize,
+                                color: Colors.white,
+                              ),
+                              onPressed: _isAddingDevice ? null : _showAddDeviceDialog,
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          icon: Icon(
-                            Icons.add_circle,
-                            size: iconSize,
-                            color: Colors.white,
-                          ),
-                          onPressed: _showAddDeviceDialog,
-                        ),
-                      ],
-                    ),
-                  ),
+                      ),
 
-                  // ===========================================================
-                  // WELCOME SECTION
-                  // ===========================================================
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Welcome Home",
-                          style: TextStyle(
-                            fontSize: titleFontSize,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            shadows: const [
-                              Shadow(
-                                blurRadius: 4,
-                                color: Colors.black54,
-                                offset: Offset(1, 2),
+                      // ===========================================================
+                      // WELCOME SECTION
+                      // ===========================================================
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Welcome Home",
+                              style: TextStyle(
+                                fontSize: titleFontSize,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                shadows: const [
+                                  Shadow(
+                                    blurRadius: 4,
+                                    color: Colors.black54,
+                                    offset: Offset(1, 2),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (userEmail != null)
+                              StreamBuilder<DocumentSnapshot>(
+                                stream: _firestore
+                                    .collection("users")
+                                    .doc(userEmail)
+                                    .snapshots(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return Text(
+                                      "...",
+                                      style: TextStyle(
+                                        fontSize: subtitleFontSize,
+                                        color: Colors.white70,
+                                      ),
+                                    );
+                                  }
+                                  if (!snapshot.hasData || !snapshot.data!.exists) {
+                                    return Text(
+                                      "No username",
+                                      style: TextStyle(
+                                        fontSize: subtitleFontSize,
+                                        color: Colors.white70,
+                                      ),
+                                    );
+                                  }
+                                  final data =
+                                      snapshot.data!.data()
+                                          as Map<String, dynamic>?;
+                                  return Text(
+                                    data?['username'] ?? "",
+                                    style: TextStyle(
+                                      fontSize: subtitleFontSize,
+                                      color: Colors.white,
+                                      shadows: const [
+                                        Shadow(
+                                          blurRadius: 2,
+                                          color: Colors.black54,
+                                          offset: Offset(0.5, 1),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              )
+                            else
+                              Text(
+                                "Not logged in",
+                                style: TextStyle(
+                                  fontSize: subtitleFontSize,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding,
+                          vertical: 8,
+                        ),
+                        child: Divider(thickness: 3, color: Colors.white38),
+                      ),
+
+                      // ===========================================================
+                      // WEATHER CARD
+                      // ===========================================================
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding,
+                          vertical: verticalPadding,
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromRGBO(255, 255, 255, 0.15),
+                            borderRadius: BorderRadius.circular(screenWidth * 0.05),
+                            border: Border.all(
+                              color: const Color.fromRGBO(255, 255, 255, 0.1),
+                              width: 1,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color.fromRGBO(255, 255, 255, 0.15),
+                                blurRadius: 8,
+                                offset: Offset(0, 4),
                               ),
                             ],
                           ),
-                        ),
-                        if (userEmail != null)
-                          StreamBuilder<DocumentSnapshot>(
-                            stream: FirebaseFirestore.instance
-                                .collection("users")
-                                .doc(userEmail)
-                                .snapshots(),
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return Text(
-                                  "...",
-                                  style: TextStyle(
-                                    fontSize: subtitleFontSize,
-                                    color: Colors.white70,
-                                  ),
-                                );
-                              }
-                              if (!snapshot.hasData || !snapshot.data!.exists) {
-                                return Text(
-                                  "No username",
-                                  style: TextStyle(
-                                    fontSize: subtitleFontSize,
-                                    color: Colors.white70,
-                                  ),
-                                );
-                              }
-                              final data =
-                                  snapshot.data!.data()
-                                      as Map<String, dynamic>?;
-                              return Text(
-                                data?['username'] ?? "",
-                                style: TextStyle(
-                                  fontSize: subtitleFontSize,
-                                  color: Colors.white,
-                                  shadows: const [
-                                    Shadow(
-                                      blurRadius: 2,
-                                      color: Colors.black54,
-                                      offset: Offset(0.5, 1),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          )
-                        else
-                          Text(
-                            "Not logged in",
-                            style: TextStyle(
-                              fontSize: subtitleFontSize,
-                              color: Colors.white70,
-                            ),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: horizontalPadding,
+                            vertical: screenHeight * 0.02,
                           ),
-                      ],
-                    ),
-                  ),
-
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                      vertical: 8,
-                    ),
-                    child: Divider(thickness: 3, color: Colors.white38),
-                  ),
-
-                  // ===========================================================
-                  // WEATHER CARD
-                  // ===========================================================
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                      vertical: verticalPadding,
-                    ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: const Color.fromRGBO(255, 255, 255, 0.15),
-                        borderRadius: BorderRadius.circular(screenWidth * 0.05),
-                        border: Border.all(
-                          color: const Color.fromRGBO(255, 255, 255, 0.1),
-                          width: 1,
-                        ),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color.fromRGBO(255, 255, 255, 0.15),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: horizontalPadding,
-                        vertical: screenHeight * 0.02,
-                      ),
-                      child: _isLoadingWeather
-                          ? const Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                              ),
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                _weatherIconForId(
-                                  weatherAPI.statusID,
-                                  size: screenWidth * 0.15,
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                          child: _isLoadingWeather
+                              ? const Center(
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
+                                    _weatherIconForId(
+                                      weatherAPI.statusID,
+                                      size: screenWidth * 0.15,
+                                    ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        ConstrainedBox(
+                                          constraints: BoxConstraints(
+                                            maxWidth: screenWidth * 0.25,
+                                          ),
+                                          child: Text(
+                                            _weatherLabel,
+                                            style: TextStyle(
+                                              fontSize: subtitleFontSize,
+                                              color: Colors.white,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Text(
+                                          "$_temp°C",
+                                          style: TextStyle(
+                                            fontSize: subtitleFontSize * 1.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                            shadows: const [
+                                              Shadow(
+                                                blurRadius: 4,
+                                                color: Colors.black45,
+                                                offset: Offset(1, 2),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                     ConstrainedBox(
                                       constraints: BoxConstraints(
-                                        maxWidth: screenWidth * 0.25,
+                                        maxWidth: screenWidth * 0.3,
                                       ),
-                                      child: Text(
-                                        _weatherLabel,
-                                        style: TextStyle(
-                                          fontSize: subtitleFontSize,
-                                          color: Colors.white,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    Text(
-                                      "$_temp°C",
-                                      style: TextStyle(
-                                        fontSize: subtitleFontSize * 1.5,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                        shadows: const [
-                                          Shadow(
-                                            blurRadius: 4,
-                                            color: Colors.black45,
-                                            offset: Offset(1, 2),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _cityName,
+                                            style: TextStyle(
+                                              fontSize: subtitleFontSize,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          Text(
+                                            _stateName,
+                                            style: TextStyle(
+                                              fontSize: subtitleFontSize * 1.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                              shadows: const [
+                                                Shadow(
+                                                  blurRadius: 4,
+                                                  color: Colors.black54,
+                                                  offset: Offset(1, 2),
+                                                ),
+                                              ],
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ],
                                       ),
                                     ),
                                   ],
                                 ),
-                                ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    maxWidth: screenWidth * 0.3,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _cityName,
-                                        style: TextStyle(
-                                          fontSize: subtitleFontSize,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      Text(
-                                        _stateName,
-                                        style: TextStyle(
-                                          fontSize: subtitleFontSize * 1.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                          shadows: const [
-                                            Shadow(
-                                              blurRadius: 4,
-                                              color: Colors.black54,
-                                              offset: Offset(1, 2),
-                                            ),
-                                          ],
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
+                        ),
+                      ),
 
-                  // ===========================================================
-                  // DEVICES GRID
-                  // ===========================================================
-                  Expanded(
-                    child: ValueListenableBuilder<Map<String, bool>>(
-                      valueListenable: _deviceStatus,
-                      builder: (context, statusMap, _) {
-                        if (_devices.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(
-                                  Icons.device_hub,
-                                  size: 56,
-                                  color: Colors.white24,
+                      // ===========================================================
+                      // DEVICES GRID
+                      // ===========================================================
+                      Expanded(
+                        child: ValueListenableBuilder<Map<String, bool>>(
+                          valueListenable: _deviceStatus,
+                          builder: (context, statusMap, _) {
+                            if (_devices.isEmpty) {
+                              return Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(
+                                      Icons.device_hub,
+                                      size: 56,
+                                      color: Colors.white24,
+                                    ),
+                                    SizedBox(height: 12),
+                                    Text(
+                                      "No devices added yet",
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    SizedBox(height: 12),
+                                  ],
                                 ),
-                                SizedBox(height: 12),
-                                Text(
-                                  "No devices added yet",
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                SizedBox(height: 12),
-                              ],
-                            ),
-                          );
-                        }
+                              );
+                            }
 
-                        return GridView.builder(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: horizontalPadding,
-                          ),
-                          itemCount: _devices.length,
-                          gridDelegate:
-                              SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: screenWidth * 0.5,
-                                childAspectRatio: 0.8,
-                                mainAxisSpacing: screenHeight * 0.02,
-                                crossAxisSpacing: screenWidth * 0.03,
+                            return GridView.builder(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: horizontalPadding,
                               ),
-                          itemBuilder: (context, index) {
-                            final dev = _devices[index];
-                            final type = (dev['type'] ?? '')
-                                .toString()
-                                .toLowerCase();
-                            final iconPath =
-                                type.contains('clothe') ||
-                                    type.contains('hanger')
-                                ? 'lib/icons/drying-rack.png'
-                                : 'lib/icons/door-open.png';
+                              itemCount: _devices.length,
+                              gridDelegate:
+                                  SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: screenWidth * 0.5,
+                                    childAspectRatio: 0.8,
+                                    mainAxisSpacing: screenHeight * 0.02,
+                                    crossAxisSpacing: screenWidth * 0.03,
+                                  ),
+                              itemBuilder: (context, index) {
+                                final dev = _devices[index];
+                                final type = (dev['type'] ?? '')
+                                    .toString()
+                                    .toLowerCase();
+                                final iconPath =
+                                    type.contains('clothe') ||
+                                        type.contains('hanger')
+                                    ? 'lib/icons/drying-rack.png'
+                                    : 'lib/icons/door-open.png';
 
-                            final statusText = _getStatusText(
-                              dev['id'],
-                              dev['type'],
-                            );
-                            final statusColor = _getStatusColor(
-                              dev['id'],
-                              dev['type'],
-                            );
+                                final statusText = _getStatusText(
+                                  dev['id'],
+                                  dev['type'],
+                                );
+                                final statusColor = _getStatusColor(
+                                  dev['id'],
+                                  dev['type'],
+                                );
 
-                            return GestureDetector(
-                              onTap: () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => _pageForDevice(dev),
+                                return GestureDetector(
+                                  onTap: _isAddingDevice ? null : () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => _pageForDevice(dev),
+                                      ),
+                                    );
+                                    if (!mounted) return;
+                                    await _loadUserDevices();
+                                  },
+                                  child: AbsorbPointer(
+                                    absorbing: _isAddingDevice,
+                                    child: ViewDevices(
+                                      deviceType: dev['type'] ?? '',
+                                      devicePart: statusText,
+                                      iconPath: iconPath,
+                                      status: statusMap[dev['id']] ?? true,
+                                      onChanged: _isAddingDevice ? null : (value) =>
+                                          powerSwitchChanged(value, dev['id']),
+                                      statusColor: statusColor,
+                                    ),
                                   ),
                                 );
-                                if (!mounted) return;
-                                await _loadUserDevices();
                               },
-                              child: ViewDevices(
-                                deviceType: dev['type'] ?? '',
-                                devicePart: statusText,
-                                iconPath: iconPath,
-                                status: statusMap[dev['id']] ?? true,
-                                onChanged: (value) =>
-                                    powerSwitchChanged(value, dev['id']),
-                                statusColor: statusColor,
-                              ),
                             );
                           },
-                        );
-                      },
-                    ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
+
+          // Full page loading overlay
+          if (_isAddingDevice)
+            Container(
+              color: Colors.black54, // Semi-transparent background
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      strokeWidth: 4,
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      "Adding Device...",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: subtitleFontSize,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      "Please wait",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: subtitleFontSize * 0.8,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
