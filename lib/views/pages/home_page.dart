@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -16,6 +15,7 @@ import 'package:smart_horizon_home/views/pages/settings-page/settings_page.dart'
 import 'package:smart_horizon_home/views/pages/login/login_page.dart';
 import 'package:smart_horizon_home/views/pages/smart-devices/qr_scanner.dart';
 import 'package:smart_horizon_home/utils/route_observer.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 // =============================================================================
 // HOME PAGE WIDGET
@@ -27,20 +27,20 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-// =============================================================================
-// HOME PAGE STATE
-// =============================================================================
 class _HomePageState extends State<HomePage> with RouteAware {
   // ===========================================================================
-  // DEPENDENCIES & SERVICES
+  // DEPENDENCIES & SERVICES - FIXED: Added _weatherService
   // ===========================================================================
-  final WeatherService weatherAPI = WeatherService();
+  final WeatherService _weatherService = WeatherService(); // FIXED: Added this line
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final DatabaseReference _realtimeDB = FirebaseDatabase.instanceFor(
     app: Firebase.app(),
     databaseURL:
         "https://smahorz-fyp-default-rtdb.asia-southeast1.firebasedatabase.app",
   ).ref();
+
+  Timer? _weatherCheckTimer; // For periodic weather checks
+  final AdvancedDrawerController _drawerController = AdvancedDrawerController(); // FIXED: Made instance variable
 
   // ===========================================================================
   // WEATHER STATE VARIABLES
@@ -62,27 +62,53 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Map<String, StreamSubscription<DocumentSnapshot>> _deviceSubscriptions = {};
 
   // ===========================================================================
-  // LIFECYCLE METHODS
+  // LIFECYCLE METHODS - FIXED: Added route observer subscription
   // ===========================================================================
   @override
   void initState() {
     super.initState();
+    _initializeApp();
+    _setupPeriodicWeatherChecks(); // ADD THIS LINE
+  }
+
+  // FIXED: Added route observer subscription
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
+  }
+
+  void _setupPeriodicWeatherChecks() {
+    // Check weather every 30 minutes automatically
+    _weatherCheckTimer = Timer.periodic(Duration(minutes: 30), (timer) {
+      if (mounted) {
+        _loadWeather();
+      }
+    });
+  }
+
+  void _initializeApp() async {
+    // Request notification permission
+    try {
+      await Permission.notification.isDenied.then((value) {
+        if (value) {
+          Permission.notification.request();
+        }
+      });
+    } catch (e) {
+      print("Notification permission error: $e");
+      // Continue anyway - don't let permission errors break the app
+    }
+
+    // Load initial data
     _loadWeather();
     _loadUserDevices();
     _testRealtimeDBConnection();
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final modal = ModalRoute.of(context);
-    if (modal != null) {
-      routeObserver.subscribe(this, modal);
-    }
-  }
-
-  @override
   void dispose() {
+    _weatherCheckTimer?.cancel(); // ADD THIS LINE
     // Cancel all device subscriptions
     for (final sub in _deviceSubscriptions.values) {
       sub.cancel();
@@ -94,13 +120,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
       routeObserver.unsubscribe(this);
     } catch (_) {}
     super.dispose();
-  }
-
-  @override
-  void didPopNext() {
-    _loadUserDevices();
-    _loadWeather();
-    super.didPopNext();
   }
 
   // ===========================================================================
@@ -629,20 +648,20 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   // ===========================================================================
-  // WEATHER METHODS
+  // WEATHER METHODS - FIXED: Now using _weatherService instead of weatherAPI
   // ===========================================================================
   Future<void> _loadWeather() async {
     try {
-      await weatherAPI.fetchData();
-      await weatherAPI.callApi();
+      await _weatherService.fetchData(); // FIXED: Use _weatherService
+      await _weatherService.callApi(); // FIXED: Use _weatherService
+
       if (!mounted) return;
       setState(() {
-        _stateName = weatherAPI.stateName ?? "Unknown";
-        _cityName = weatherAPI.cityName ?? "Unknown";
-        _temp = weatherAPI.currentTemp;
-        _weatherLabel =
-            weatherAPI.weatherMain ??
-            weatherAPI.weatherDescription ??
+        _stateName = _weatherService.stateName ?? "Unknown"; // FIXED: Use _weatherService
+        _cityName = _weatherService.cityName ?? "Unknown"; // FIXED: Use _weatherService
+        _temp = _weatherService.currentTemp; // FIXED: Use _weatherService
+        _weatherLabel = _weatherService.weatherMain ?? // FIXED: Use _weatherService
+            _weatherService.weatherDescription ?? // FIXED: Use _weatherService
             "Weather";
         _isLoadingWeather = false;
       });
@@ -796,12 +815,26 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   // ===========================================================================
-  // BUILD METHOD
+  // NAVIGATION HELPER METHODS
+  // ===========================================================================
+  Future<void> _navigateToPage(Widget page) async {
+    _drawerController.hideDrawer();
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    if (mounted) await _loadUserDevices();
+  }
+
+  Future<void> _navigateToDevicePage(Map<String, dynamic> dev) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => _pageForDevice(dev)));
+    if (mounted) await _loadUserDevices();
+  }
+
+  // ===========================================================================
+  // BUILD METHOD - FIXED: Using _drawerController instance
   // ===========================================================================
   @override
   Widget build(BuildContext context) {
     final userEmail = FirebaseAuth.instance.currentUser?.email;
-    final drawerController = AdvancedDrawerController();
+    final drawerController = _drawerController; // FIXED: Using instance variable
 
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -816,7 +849,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       child: Stack(
         children: [
           AdvancedDrawer(
-            controller: drawerController,
+            controller: drawerController, // FIXED: Using instance variable
             openScale: 0.7,
             openRatio: 0.65,
             animationCurve: Curves.easeInOutSine,
@@ -1080,7 +1113,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                       ),
 
                       // ===========================================================
-                      // WEATHER CARD
+                      // WEATHER CARD - FIXED: Using _weatherService.statusID
                       // ===========================================================
                       Padding(
                         padding: EdgeInsets.symmetric(
@@ -1120,7 +1153,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     _weatherIconForId(
-                                      weatherAPI.statusID,
+                                      _weatherService.statusID, // FIXED: Using _weatherService
                                       size: screenWidth * 0.15,
                                     ),
                                     Column(
