@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -35,7 +36,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
   // ===========================================================================
   final WeatherService weatherAPI = WeatherService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final DatabaseReference _realtimeDB = FirebaseDatabase.instance.ref();
+  final DatabaseReference _realtimeDB = FirebaseDatabase.instanceFor(
+    app: Firebase.app(),
+    databaseURL:
+        "https://smahorz-fyp-default-rtdb.asia-southeast1.firebasedatabase.app",
+  ).ref();
 
   // ===========================================================================
   // WEATHER STATE VARIABLES
@@ -234,19 +239,23 @@ class _HomePageState extends State<HomePage> with RouteAware {
       };
 
       print("🧪 Testing Realtime DB write to: $testPath");
-      
-      await _realtimeDB.child(testPath).set(testData).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          print("❌ Realtime DB write test TIMEOUT");
-          return false;
-        },
-      );
+
+      await _realtimeDB
+          .child(testPath)
+          .set(testData)
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              print("❌ Realtime DB write test TIMEOUT");
+              return false;
+            },
+          );
 
       // Verify the write
-      final snapshot = await _realtimeDB.child(testPath).once().timeout(
-        const Duration(seconds: 3),
-      );
+      final snapshot = await _realtimeDB
+          .child(testPath)
+          .once()
+          .timeout(const Duration(seconds: 3));
 
       if (snapshot.snapshot.exists) {
         print("✅ Realtime DB write test SUCCESS");
@@ -344,7 +353,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final existingHouseholdId = deviceData['householdId'];
 
       // --- 2️ Check if device already assigned to another household ---
-      if (existingHouseholdId != null && existingHouseholdId.toString().isNotEmpty) {
+      if (existingHouseholdId != null &&
+          existingHouseholdId.toString().isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -356,7 +366,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
       }
 
       // --- 3️ Get user's household ID ---
-      final userDoc = await _firestore.collection('users').doc(user.email).get();
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(user.email)
+          .get();
       if (!userDoc.exists) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('User profile not found.')),
@@ -379,7 +392,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
       }
 
       // --- 4️ Verify household exists ---
-      final householdDoc = await _firestore.collection('households').doc(householdId).get();
+      final householdDoc = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .get();
       if (!householdDoc.exists) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Your household does not exist.')),
@@ -429,29 +445,35 @@ class _HomePageState extends State<HomePage> with RouteAware {
       if (canWriteToRTDB) {
         try {
           print("🔄 Writing device data to Realtime Database...");
-          
+
           // Write only the essential data first
-          await _realtimeDB.child('$realtimePath/status').set(false).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {
-              throw TimeoutException("Realtime DB status write timeout");
-            },
-          );
-          
+          await _realtimeDB
+              .child('$realtimePath/status')
+              .set(false)
+              .timeout(
+                const Duration(seconds: 5),
+                onTimeout: () {
+                  throw TimeoutException("Realtime DB status write timeout");
+                },
+              );
+
           print("✅ Basic device status written to Realtime DB");
 
           // Add additional device info with separate writes
           await _realtimeDB.child('$realtimePath/type').set(deviceType);
           await _realtimeDB.child('$realtimePath/name').set(deviceName);
-          await _realtimeDB.child('$realtimePath/addedAt').set(DateTime.now().millisecondsSinceEpoch);
+          await _realtimeDB
+              .child('$realtimePath/addedAt')
+              .set(DateTime.now().millisecondsSinceEpoch);
 
           print("✅ All device data written to Realtime DB");
-
         } catch (e) {
           print("❌ Error writing to Realtime DB: $e");
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Device added but Realtime Database setup had issues.'),
+              content: Text(
+                'Device added but Realtime Database setup had issues.',
+              ),
               backgroundColor: Colors.orange,
             ),
           );
@@ -460,7 +482,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
         print("⚠️ Skipping Realtime DB setup due to connection issues");
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Device added but could not connect to Realtime Database.'),
+            content: Text(
+              'Device added but could not connect to Realtime Database.',
+            ),
             backgroundColor: Colors.orange,
           ),
         );
@@ -486,18 +510,17 @@ class _HomePageState extends State<HomePage> with RouteAware {
       );
 
       print("=== DEVICE ADDITION COMPLETED ===");
-
     } catch (e) {
       print("❌ ERROR IN _addDeviceById: $e");
       debugPrint('Error adding device: $e');
-      
+
       // Hide loading indicator on error
       if (mounted) {
         setState(() {
           _isAddingDevice = false;
         });
       }
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error adding device: ${e.toString()}'),
@@ -798,7 +821,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
             openRatio: 0.65,
             animationCurve: Curves.easeInOutSine,
             animateChildDecoration: true,
-            childDecoration: BoxDecoration(borderRadius: BorderRadius.circular(20)),
+            childDecoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+            ),
             backdropColor: const Color.fromARGB(255, 22, 22, 22),
             drawer: Container(
               color: const Color.fromARGB(255, 36, 36, 36),
@@ -814,33 +839,43 @@ class _HomePageState extends State<HomePage> with RouteAware {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             ListTile(
-                              onTap: _isAddingDevice ? null : () => drawerController.hideDrawer(),
+                              onTap: _isAddingDevice
+                                  ? null
+                                  : () => drawerController.hideDrawer(),
                               leading: const Icon(Icons.home),
                               title: const Text('Home'),
                             ),
                             ListTile(
-                              onTap: _isAddingDevice ? null : () async {
-                                drawerController.hideDrawer();
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => ProfilePage()),
-                                );
-                                if (!mounted) return;
-                                await _loadUserDevices();
-                              },
+                              onTap: _isAddingDevice
+                                  ? null
+                                  : () async {
+                                      drawerController.hideDrawer();
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => ProfilePage(),
+                                        ),
+                                      );
+                                      if (!mounted) return;
+                                      await _loadUserDevices();
+                                    },
                               leading: const Icon(Icons.account_circle_rounded),
                               title: const Text('Profile'),
                             ),
                             ListTile(
-                              onTap: _isAddingDevice ? null : () async {
-                                drawerController.hideDrawer();
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => SettingsPage()),
-                                );
-                                if (!mounted) return;
-                                await _loadUserDevices();
-                              },
+                              onTap: _isAddingDevice
+                                  ? null
+                                  : () async {
+                                      drawerController.hideDrawer();
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => SettingsPage(),
+                                        ),
+                                      );
+                                      if (!mounted) return;
+                                      await _loadUserDevices();
+                                    },
                               leading: const Icon(Icons.settings),
                               title: const Text('Settings'),
                             ),
@@ -915,7 +950,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                 size: iconSize,
                                 color: Colors.white,
                               ),
-                              onPressed: _isAddingDevice ? null : () => drawerController.toggleDrawer(),
+                              onPressed: _isAddingDevice
+                                  ? null
+                                  : () => drawerController.toggleDrawer(),
                             ),
                             const Spacer(),
                             IconButton(
@@ -924,16 +961,18 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                 size: iconSize,
                                 color: Colors.white,
                               ),
-                              onPressed: _isAddingDevice ? null : () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => NotificationPage(),
-                                  ),
-                                );
-                                if (!mounted) return;
-                                await _loadUserDevices();
-                              },
+                              onPressed: _isAddingDevice
+                                  ? null
+                                  : () async {
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => NotificationPage(),
+                                        ),
+                                      );
+                                      if (!mounted) return;
+                                      await _loadUserDevices();
+                                    },
                             ),
                             IconButton(
                               icon: Icon(
@@ -941,7 +980,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                 size: iconSize,
                                 color: Colors.white,
                               ),
-                              onPressed: _isAddingDevice ? null : _showAddDeviceDialog,
+                              onPressed: _isAddingDevice
+                                  ? null
+                                  : _showAddDeviceDialog,
                             ),
                           ],
                         ),
@@ -989,7 +1030,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                       ),
                                     );
                                   }
-                                  if (!snapshot.hasData || !snapshot.data!.exists) {
+                                  if (!snapshot.hasData ||
+                                      !snapshot.data!.exists) {
                                     return Text(
                                       "No username",
                                       style: TextStyle(
@@ -1048,7 +1090,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
                         child: Container(
                           decoration: BoxDecoration(
                             color: const Color.fromRGBO(255, 255, 255, 0.15),
-                            borderRadius: BorderRadius.circular(screenWidth * 0.05),
+                            borderRadius: BorderRadius.circular(
+                              screenWidth * 0.05,
+                            ),
                             border: Border.all(
                               color: const Color.fromRGBO(255, 255, 255, 0.1),
                               width: 1,
@@ -1072,14 +1116,16 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                   ),
                                 )
                               : Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     _weatherIconForId(
                                       weatherAPI.statusID,
                                       size: screenWidth * 0.15,
                                     ),
                                     Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         ConstrainedBox(
                                           constraints: BoxConstraints(
@@ -1216,16 +1262,19 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                 );
 
                                 return GestureDetector(
-                                  onTap: _isAddingDevice ? null : () async {
-                                    await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => _pageForDevice(dev),
-                                      ),
-                                    );
-                                    if (!mounted) return;
-                                    await _loadUserDevices();
-                                  },
+                                  onTap: _isAddingDevice
+                                      ? null
+                                      : () async {
+                                          await Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  _pageForDevice(dev),
+                                            ),
+                                          );
+                                          if (!mounted) return;
+                                          await _loadUserDevices();
+                                        },
                                   child: AbsorbPointer(
                                     absorbing: _isAddingDevice,
                                     child: ViewDevices(
@@ -1233,8 +1282,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                       devicePart: statusText,
                                       iconPath: iconPath,
                                       status: statusMap[dev['id']] ?? true,
-                                      onChanged: _isAddingDevice ? null : (value) =>
-                                          powerSwitchChanged(value, dev['id']),
+                                      onChanged: _isAddingDevice
+                                          ? null
+                                          : (value) => powerSwitchChanged(
+                                              value,
+                                              dev['id'],
+                                            ),
                                       statusColor: statusColor,
                                     ),
                                   ),
@@ -1254,33 +1307,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
           // Full page loading overlay
           if (_isAddingDevice)
             Container(
-              color: Colors.black54, // Semi-transparent background
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      strokeWidth: 4,
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      "Adding Device...",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: subtitleFontSize,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      "Please wait",
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: subtitleFontSize * 0.8,
-                      ),
-                    ),
-                  ],
+              color: Colors.black54, // Semi-transparent black overlay
+              child: const Center(
+                child: CircularProgressIndicator(
+                  color: Colors.blue,
+                  backgroundColor: Colors.transparent,
                 ),
               ),
             ),
