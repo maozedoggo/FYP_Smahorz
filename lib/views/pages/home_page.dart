@@ -151,6 +151,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                       },
                     };
                   } else {
+                    // All other devices use simple boolean status
                     final bool isOn =
                         statusData == true ||
                         (statusData is Map
@@ -194,6 +195,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final deviceType = device['type']?.toString().toLowerCase() ?? '';
 
       if (deviceType.contains('parcel')) {
+        // Parcel box listeners
         final insidePath = '$householdId/$deviceId/insideStatus';
         final outsidePath = '$householdId/$deviceId/outsideStatus';
 
@@ -219,6 +221,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
           }
         });
       } else {
+        // All other devices use simple boolean status
         final path = '$householdId/$deviceId/status';
         _realtimeDB.child(path).onValue.listen((DatabaseEvent event) {
           if (event.snapshot.exists && mounted) {
@@ -271,8 +274,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
         });
 
         final deviceType = dd['type']?.toString().toLowerCase() ?? '';
+        final statusData = dd['status'];
+
         if (deviceType.contains('parcel')) {
-          final statusData = dd['status'];
           statusMap[id] = {
             'insideStatus': statusData is Map
                 ? statusData['insideStatus'] ?? false
@@ -282,7 +286,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 : false,
           };
         } else {
-          statusMap[id] = dd['status'] ?? false;
+          // === SIMPLIFY THIS ===
+          // All other devices use simple boolean status
+          statusMap[id] = statusData ?? false;
+          // === END SIMPLIFY ===
         }
       }
 
@@ -379,11 +386,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final deviceType = deviceData['type'] ?? 'Unknown';
       final deviceName = deviceData['name'] ?? id;
 
+      // In _addDeviceById method - find this part:
       await deviceRef.update({
         'householdId': householdId,
         'status': deviceType.toLowerCase().contains('parcel')
             ? {'insideStatus': false, 'outsideStatus': false}
-            : false,
+            : false, // This ensures clothes hanger gets boolean false
         'addedAt': FieldValue.serverTimestamp(),
       });
 
@@ -525,6 +533,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
   // ===========================================================================
   // DEVICE CONTROL METHODS
   // ===========================================================================
+  // ===========================================================================
+  // DEVICE CONTROL METHODS
+  // ===========================================================================
+  // In powerSwitchChanged method - use simple boolean for all devices
   void powerSwitchChanged(
     bool value,
     String deviceId, [
@@ -541,19 +553,40 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final householdId = userDoc.data()?['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return;
 
-      _updateLocalDeviceStatus(deviceId, switchType, value);
+      // === ADD THIS ===
+      // Get device type
+      final device = _devices.firstWhere(
+        (d) => d['id'] == deviceId,
+        orElse: () => {'type': ''},
+      );
+      final deviceType = device['type']?.toString().toLowerCase() ?? '';
+      // === END ADD ===
 
-      final updateData = switchType == 'status'
-          ? {'status': value, 'lastUpdated': FieldValue.serverTimestamp()}
-          : {
-              'status.$switchType': value,
-              'lastUpdated': FieldValue.serverTimestamp(),
-            };
+      if (deviceType.contains('parcel')) {
+        // Parcel box - individual door control
+        _updateLocalDeviceStatus(deviceId, switchType, value);
 
-      await _firestore.collection('devices').doc(deviceId).update(updateData);
+        final updateData = switchType == 'status'
+            ? {'status': value, 'lastUpdated': FieldValue.serverTimestamp()}
+            : {
+                'status.$switchType': value,
+                'lastUpdated': FieldValue.serverTimestamp(),
+              };
 
-      final path = switchType == 'status' ? 'status' : switchType;
-      await _realtimeDB.child('$householdId/$deviceId/$path').set(value);
+        await _firestore.collection('devices').doc(deviceId).update(updateData);
+        final path = switchType == 'status' ? 'status' : switchType;
+        await _realtimeDB.child('$householdId/$deviceId/$path').set(value);
+      } else {
+        // All other devices (including clothes hanger) - simple boolean
+        _updateLocalDeviceStatus(deviceId, switchType, value);
+
+        await _firestore.collection('devices').doc(deviceId).update({
+          'status': value,
+          'lastUpdated': FieldValue.serverTimestamp(),
+        });
+
+        await _realtimeDB.child('$householdId/$deviceId/status').set(value);
+      }
     } catch (e) {
       print("Error controlling device: $e");
       _updateLocalDeviceStatus(deviceId, switchType, !value);
@@ -595,9 +628,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final outside = status is Map ? status['outsideStatus'] ?? false : false;
       return 'In: ${inside ? 'On' : 'Off'}, Out: ${outside ? 'On' : 'Off'}';
     } else {
+      // All other devices use simple boolean status
       final isOn =
           status == true || (status is Map ? status['status'] ?? false : false);
-      return isOn ? 'On' : 'Off';
+      return isOn ? 'Extend' : 'Retract';
     }
   }
 
@@ -610,6 +644,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final outside = status is Map ? status['outsideStatus'] ?? false : false;
       return (inside || outside) ? Colors.green : Colors.red;
     } else {
+      // All other devices use simple boolean status
       final isOn =
           status == true || (status is Map ? status['status'] ?? false : false);
       return isOn ? Colors.green : Colors.red;
@@ -619,109 +654,120 @@ class _HomePageState extends State<HomePage> with RouteAware {
   // ===========================================================================
   // PARCEL BOX WIDGET - Individual cards for inside and outside doors
   // ===========================================================================
-  Widget _buildParcelBoxCard(
-    Map<String, dynamic> device,
-    dynamic deviceStatus,
-  ) {
-    final insideStatus = deviceStatus is Map
-        ? deviceStatus['insideStatus'] ?? false
-        : false;
-    final outsideStatus = deviceStatus is Map
-        ? deviceStatus['outsideStatus'] ?? false
-        : false;
-
-    return Column(
-      children: [
-        // Inside Door Card
-        Container(
-          margin: EdgeInsets.all(4),
-          child: _buildDoorCard(
-            device: device,
-            isInside: true,
-            isOn: insideStatus,
-            onChanged: (value) =>
-                powerSwitchChanged(value, device['id'], 'insideStatus'),
-          ),
-        ),
-        // Outside Door Card
-        Container(
-          margin: EdgeInsets.all(4),
-          child: _buildDoorCard(
-            device: device,
-            isInside: false,
-            isOn: outsideStatus,
-            onChanged: (value) =>
-                powerSwitchChanged(value, device['id'], 'outsideStatus'),
-          ),
-        ),
-      ],
-    );
+  // ===========================================================================
+  // NEW METHODS FOR HANDLING INDIVIDUAL CARDS
+  // ===========================================================================
+  int _getTotalDeviceCards() {
+    int total = 0;
+    for (final device in _devices) {
+      final type = (device['type'] ?? '').toString().toLowerCase();
+      if (type.contains('parcel')) {
+        total += 2; // Two cards for parcel box (inside + outside)
+      } else {
+        total += 1; // One card for regular devices
+      }
+    }
+    return total;
   }
 
-  Widget _buildDoorCard({
-    required Map<String, dynamic> device,
-    required bool isInside,
-    required bool isOn,
-    required Function(bool) onChanged,
-  }) {
+  Widget _getDeviceCardAtIndex(int index) {
+    int currentIndex = 0;
+
+    for (final device in _devices) {
+      final type = (device['type'] ?? '').toString().toLowerCase();
+      final deviceStatus = _deviceStatus.value[device['id']];
+
+      if (type.contains('parcel')) {
+        // Parcel box - return individual cards for inside and outside
+        if (index == currentIndex) {
+          return _buildParcelDoorCard(
+            device,
+            deviceStatus,
+            true,
+          ); // Inside door
+        } else if (index == currentIndex + 1) {
+          return _buildParcelDoorCard(
+            device,
+            deviceStatus,
+            false,
+          ); // Outside door
+        }
+        currentIndex += 2;
+      } else {
+        // Regular device
+        // In _getDeviceCardAtIndex() method - for regular devices:
+        if (index == currentIndex) {
+          final iconPath = type.contains('clothe') || type.contains('hanger')
+              ? 'lib/icons/drying-rack.png'
+              : 'lib/icons/door-open.png';
+
+          final statusText = _getStatusText(device['id'], device['type']);
+          final statusColor = _getStatusColor(device['id'], device['type']);
+
+          // === SIMPLIFY THIS ===
+          // All devices now use simple boolean status
+          final displayStatus = deviceStatus is bool ? deviceStatus : false;
+          // === END SIMPLIFY ===
+
+          return GestureDetector(
+            onTap: _isAddingDevice ? null : () => _navigateToDevicePage(device),
+            child: AbsorbPointer(
+              absorbing: _isAddingDevice,
+              child: ViewDevices(
+                deviceType: device['type'] ?? '',
+                devicePart: statusText,
+                iconPath: iconPath,
+                status: displayStatus,
+                onChanged: _isAddingDevice
+                    ? null
+                    : (value) => powerSwitchChanged(value, device['id']),
+                statusColor: statusColor,
+              ),
+            ),
+          );
+        }
+        currentIndex += 1;
+      }
+    }
+
+    return Container(); // Fallback
+  }
+
+  // ===========================================================================
+  // INDIVIDUAL PARCEL DOOR CARD
+  // ===========================================================================
+  // ===========================================================================
+  // INDIVIDUAL PARCEL DOOR CARD
+  // ===========================================================================
+  Widget _buildParcelDoorCard(
+    Map<String, dynamic> device,
+    dynamic deviceStatus,
+    bool isInside,
+  ) {
+    final doorStatus = deviceStatus is Map
+        ? deviceStatus[isInside ? 'insideStatus' : 'outsideStatus'] ?? false
+        : false;
     final doorName = isInside ? 'Inside Door' : 'Outside Door';
-    final iconPath = isInside
-        ? 'lib/icons/door-inside.png'
-        : 'lib/icons/door-outside.png';
-    final statusColor = isOn ? Colors.green : Colors.red;
-    final statusText = isOn ? 'On' : 'Off';
+    final statusColor = doorStatus ? Colors.green : Colors.red;
+    final statusText = doorStatus ? 'On' : 'Off';
 
     return GestureDetector(
       onTap: _isAddingDevice ? null : () => _navigateToDevicePage(device),
       child: AbsorbPointer(
         absorbing: _isAddingDevice,
-        child: Container(
-          padding: EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.2)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Door Icon - Use different icons for inside/outside
-              Icon(
-                isInside ? Icons.door_front_door : Icons.door_back_door,
-                size: 35,
-                color: Colors.white,
-              ),
-              SizedBox(height: 6),
-
-              // Door Name
-              Text(
-                doorName,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+        child: ViewDevices(
+          deviceType: doorName,
+          devicePart: statusText,
+          iconPath: 'lib/icons/parcel-box.png',
+          status: doorStatus,
+          onChanged: _isAddingDevice
+              ? null
+              : (value) => powerSwitchChanged(
+                  value,
+                  device['id'],
+                  isInside ? 'insideStatus' : 'outsideStatus',
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: 4),
-
-              // Status Text
-              Text(
-                statusText,
-                style: TextStyle(color: statusColor, fontSize: 11),
-              ),
-              SizedBox(height: 6),
-
-              // Switch
-              Switch(
-                value: isOn,
-                onChanged: _isAddingDevice ? null : onChanged,
-                activeColor: Colors.green,
-              ),
-            ],
-          ),
+          statusColor: statusColor,
         ),
       ),
     );
@@ -1177,6 +1223,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                       ),
 
                       // DEVICES GRID
+                      // DEVICES GRID
                       Expanded(
                         child: ValueListenableBuilder<Map<String, dynamic>>(
                           valueListenable: _deviceStatus,
@@ -1209,7 +1256,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                               padding: EdgeInsets.symmetric(
                                 horizontal: horizontalPadding,
                               ),
-                              itemCount: _devices.length,
+                              itemCount:
+                                  _getTotalDeviceCards(), // Use new method to count cards
                               gridDelegate:
                                   SliverGridDelegateWithMaxCrossAxisExtent(
                                     maxCrossAxisExtent: screenWidth * 0.5,
@@ -1218,57 +1266,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                     crossAxisSpacing: screenWidth * 0.03,
                                   ),
                               itemBuilder: (context, index) {
-                                final dev = _devices[index];
-                                final type = (dev['type'] ?? '')
-                                    .toString()
-                                    .toLowerCase();
-                                final deviceStatus = statusMap[dev['id']];
-
-                                if (type.contains('parcel')) {
-                                  // PARCEL BOX - Custom widget with two switches
-                                  return _buildParcelBoxCard(dev, deviceStatus);
-                                } else {
-                                  // SINGLE SWITCH DEVICES - Use existing ViewDevices
-                                  final iconPath =
-                                      type.contains('clothe') ||
-                                          type.contains('hanger')
-                                      ? 'lib/icons/drying-rack.png'
-                                      : 'lib/icons/door-open.png';
-
-                                  final statusText = _getStatusText(
-                                    dev['id'],
-                                    dev['type'],
-                                  );
-                                  final statusColor = _getStatusColor(
-                                    dev['id'],
-                                    dev['type'],
-                                  );
-                                  final displayStatus = deviceStatus is bool
-                                      ? deviceStatus
-                                      : false;
-
-                                  return GestureDetector(
-                                    onTap: _isAddingDevice
-                                        ? null
-                                        : () => _navigateToDevicePage(dev),
-                                    child: AbsorbPointer(
-                                      absorbing: _isAddingDevice,
-                                      child: ViewDevices(
-                                        deviceType: dev['type'] ?? '',
-                                        devicePart: statusText,
-                                        iconPath: iconPath,
-                                        status: displayStatus,
-                                        onChanged: _isAddingDevice
-                                            ? null
-                                            : (value) => powerSwitchChanged(
-                                                value,
-                                                dev['id'],
-                                              ),
-                                        statusColor: statusColor,
-                                      ),
-                                    ),
-                                  );
-                                }
+                                final deviceCard = _getDeviceCardAtIndex(index);
+                                return deviceCard;
                               },
                             );
                           },
