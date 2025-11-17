@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -31,45 +30,54 @@ class HomePage extends StatefulWidget {
 // HOME PAGE STATE
 // =============================================================================
 class _HomePageState extends State<HomePage> with RouteAware {
-  // ===========================================================================
+  // ========================
   // DEPENDENCIES & SERVICES
-  // ===========================================================================
+  // ========================
   final WeatherService weatherAPI = WeatherService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // Use the app instance to initialize the correct RTDB URL (keep your URL)
   final DatabaseReference _realtimeDB = FirebaseDatabase.instanceFor(
     app: Firebase.app(),
     databaseURL:
         "https://smahorz-fyp-default-rtdb.asia-southeast1.firebasedatabase.app",
   ).ref();
 
-  // ===========================================================================
+  // ========================
   // WEATHER STATE VARIABLES
-  // ===========================================================================
+  // ========================
   bool _isLoadingWeather = true;
   String _cityName = "City";
   int _temp = 0;
   String _stateName = "State";
   String _weatherLabel = "Weather";
 
-  // ===========================================================================
+  // ========================
   // DEVICE STATE VARIABLES
-  // ===========================================================================
+  // ========================
   List<Map<String, dynamic>> _devices = [];
   final ValueNotifier<Map<String, bool>> _deviceStatus = ValueNotifier({});
   bool _isAddingDevice = false; // Loading state for adding device
 
-  // Store subscriptions so we can cancel them on dispose
-  Map<String, StreamSubscription<DocumentSnapshot>> _deviceSubscriptions = {};
+  // Store firestore subscriptions per device so we can cancel them
+  final Map<String, StreamSubscription<DocumentSnapshot>> _deviceSubscriptions = {};
 
-  // ===========================================================================
+  // ========================
+  // NOTIFICATIONS VARIABLES
+  // ========================
+  int _unreadNotificationCount = 0;
+  StreamSubscription<QuerySnapshot>? _notificationSubscription;
+
+  // ========================
   // LIFECYCLE METHODS
-  // ===========================================================================
+  // ========================
   @override
   void initState() {
     super.initState();
     _loadWeather();
     _loadUserDevices();
     _testRealtimeDBConnection();
+    _listenToNotifications(); // Start listening for unread notifications
   }
 
   @override
@@ -82,223 +90,135 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   @override
-  void dispose() {
-    // Cancel all device subscriptions
-    for (final sub in _deviceSubscriptions.values) {
-      sub.cancel();
-    }
-    _deviceSubscriptions.clear();
-
-    // unsubscribe from route events
-    try {
-      routeObserver.unsubscribe(this);
-    } catch (_) {}
-    super.dispose();
-  }
-
-  @override
   void didPopNext() {
+    // Called when returning to this route — refresh
     _loadUserDevices();
     _loadWeather();
     super.didPopNext();
   }
 
-  // ===========================================================================
-  // FIRESTORE METHODS
-  // ===========================================================================
-  void _setupFirestoreListeners() {
-    print("Setting up Firestore listeners for ${_devices.length} devices");
+  @override
+  void dispose() {
+    // Cancel notification subscription
+    _notificationSubscription?.cancel();
 
+    // Cancel all device subscriptions
+    for (final sub in _deviceSubscriptions.values) {
+      try {
+        sub.cancel();
+      } catch (_) {}
+    }
+    _deviceSubscriptions.clear();
+
+    // Unsubscribe from route events
+    try {
+      routeObserver.unsubscribe(this);
+    } catch (_) {}
+
+    super.dispose();
+  }
+
+  // ========================
+  // FIRESTORE LISTENERS
+  // ========================
+  void _setupFirestoreListeners() {
     // Cancel old subscriptions first
     for (final sub in _deviceSubscriptions.values) {
       sub.cancel();
     }
     _deviceSubscriptions.clear();
 
-    // Listen to each device's status in Firestore
     for (final device in _devices) {
       final deviceId = device['id'];
-      print("Listening to Firestore document: devices/$deviceId");
+      if (deviceId == null) continue;
 
       final subscription = _firestore
           .collection('devices')
           .doc(deviceId)
           .snapshots()
-          .listen(
-            (documentSnapshot) {
-              if (documentSnapshot.exists && mounted) {
-                final data = documentSnapshot.data();
-                if (data != null && data.containsKey('status')) {
-                  final bool isOn = data['status'] == true;
+          .listen((documentSnapshot) {
+        if (!mounted) return;
+        if (documentSnapshot.exists) {
+          final data = documentSnapshot.data();
+          if (data != null && data.containsKey('status')) {
+            final bool isOn = data['status'] == true;
+            _deviceStatus.value = {..._deviceStatus.value, deviceId: isOn};
+          }
+        }
+      }, onError: (error) {
+        debugPrint("Firestore listener error for $deviceId: $error");
+      });
 
-                  print("Firestore update - $deviceId: $isOn");
-
-                  // Update the device status in the ValueNotifier
-                  _deviceStatus.value = {
-                    ..._deviceStatus.value,
-                    deviceId: isOn,
-                  };
-                }
-              }
-            },
-            onError: (error) {
-              print("Firestore listener error for $deviceId: $error");
-            },
-          );
-
-      // Store subscription for later cleanup
       _deviceSubscriptions[deviceId] = subscription;
     }
   }
 
-  // ===========================================================================
-  // REALTIME DATABASE METHODS
-  // ===========================================================================
+  // ========================
+  // REALTIME DB LISTENERS
+  // ========================
   void _setupRealtimeDBListeners() async {
-    print("Setting up Realtime DB listeners for ${_devices.length} devices");
-
-    // Get household ID first
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     final userDoc = await _firestore.collection('users').doc(user.email).get();
-
     final householdId = userDoc.data()?['householdId'];
-    if (householdId == null) {
-      print("No household ID found for Realtime DB listeners");
-      return;
-    }
+    if (householdId == null) return;
 
-    print("Realtime DB listeners using household: $householdId");
-
-    // Listen to each device's status in Realtime Database
     for (final device in _devices) {
       final deviceId = device['id'];
+      if (deviceId == null) continue;
       final path = '$householdId/$deviceId/status';
-      print("Listening to Realtime DB: $path");
-
-      _realtimeDB
-          .child(path)
-          .onValue
-          .listen(
-            (DatabaseEvent event) {
-              if (event.snapshot.exists && mounted) {
-                final status = event.snapshot.value;
-                final bool isOn = status == true;
-
-                print("Realtime DB update - $deviceId: $isOn");
-
-                // Update the device status in the ValueNotifier
-                _deviceStatus.value = {..._deviceStatus.value, deviceId: isOn};
-              }
-            },
-            onError: (error) {
-              print("Realtime DB listener error for $deviceId: $error");
-            },
-          );
+      try {
+        _realtimeDB.child(path).onValue.listen((DatabaseEvent event) {
+          if (!mounted) return;
+          if (event.snapshot.exists) {
+            final status = event.snapshot.value;
+            final bool isOn = status == true;
+            _deviceStatus.value = {..._deviceStatus.value, deviceId: isOn};
+          }
+        }, onError: (error) {
+          debugPrint("Realtime DB listener error for $deviceId: $error");
+        });
+      } catch (e) {
+        debugPrint("Error attaching Realtime DB listener for $deviceId: $e");
+      }
     }
   }
 
-  void _testRealtimeDBConnection() async {
+  Future<void> _testRealtimeDBConnection() async {
     try {
       final testPath = 'test_connection';
-      print("Testing Realtime DB connection...");
-
-      await _realtimeDB
-          .child(testPath)
-          .set({
-            'test': 'Hello from Flutter',
-            'timestamp': DateTime.now().millisecondsSinceEpoch,
-          })
-          .then((_) {
-            print("✓ Realtime DB test write SUCCESS");
-
-            // Try to read it back
-            _realtimeDB.child(testPath).get().then((snapshot) {
-              if (snapshot.exists) {
-                print("✓ Realtime DB test read SUCCESS: ${snapshot.value}");
-              } else {
-                print("✗ Realtime DB test read FAILED");
-              }
-            });
-          })
-          .catchError((error) {
-            print("✗ Realtime DB test write FAILED: $error");
-          });
-    } catch (e) {
-      print("✗ Realtime DB test exception: $e");
-    }
-  }
-
-  Future<bool> _testRealtimeDBWrite(String householdId, String deviceId) async {
-    try {
-      final testPath = '$householdId/test_$deviceId';
-      final testData = {
-        'test': 'write_test',
+      await _realtimeDB.child(testPath).set({
+        'test': 'Hello from Flutter',
         'timestamp': DateTime.now().millisecondsSinceEpoch,
-      };
-
-      print("🧪 Testing Realtime DB write to: $testPath");
-
-      await _realtimeDB
-          .child(testPath)
-          .set(testData)
-          .timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {
-              print("❌ Realtime DB write test TIMEOUT");
-              return false;
-            },
-          );
-
-      // Verify the write
-      final snapshot = await _realtimeDB
-          .child(testPath)
-          .once()
-          .timeout(const Duration(seconds: 3));
-
-      if (snapshot.snapshot.exists) {
-        print("✅ Realtime DB write test SUCCESS");
-        // Clean up test data
-        await _realtimeDB.child(testPath).remove();
-        return true;
-      } else {
-        print("❌ Realtime DB write test FAILED - data not found");
-        return false;
-      }
+      });
+      final snapshot = await _realtimeDB.child(testPath).get();
+      debugPrint(snapshot.exists ? "Realtime DB read OK" : "Realtime DB read FAILED");
+      // Optionally remove test data
+      await _realtimeDB.child(testPath).remove();
     } catch (e) {
-      print("❌ Realtime DB write test ERROR: $e");
-      return false;
+      debugPrint("Realtime DB test error: $e");
     }
   }
 
-  // ===========================================================================
-  // DEVICE MANAGEMENT METHODS
-  // ===========================================================================
+  // ========================
+  // DEVICE MANAGEMENT
+  // ========================
   Future<void> _loadUserDevices() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(user.email)
-          .get();
+      final userDoc = await _firestore.collection('users').doc(user.email).get();
       if (!userDoc.exists) return;
-
       final userData = userDoc.data() ?? {};
       final householdId = userData['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return;
 
-      final householdDoc = await _firestore
-          .collection('households')
-          .doc(householdId)
-          .get();
+      final householdDoc = await _firestore.collection('households').doc(householdId).get();
       if (!householdDoc.exists) return;
 
-      final deviceIds = List<String>.from(
-        householdDoc.data()?['devices'] ?? [],
-      );
+      final deviceIds = List<String>.from(householdDoc.data()?['devices'] ?? []);
       final loaded = <Map<String, dynamic>>[];
       final statusMap = <String, bool>{};
 
@@ -318,7 +238,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       setState(() => _devices = loaded);
       _deviceStatus.value = statusMap;
 
-      // Setup both Firestore and Realtime DB listeners
+      // Attach listeners for the newly loaded devices
       _setupFirestoreListeners();
       _setupRealtimeDBListeners();
     } catch (e) {
@@ -330,217 +250,110 @@ class _HomePageState extends State<HomePage> with RouteAware {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You must be logged in to add a device.'),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You must be logged in to add a device.')));
         return;
       }
 
-      // --- 1️ Get device from Firestore ---
       final deviceRef = _firestore.collection('devices').doc(id);
       final deviceDoc = await deviceRef.get();
-
       if (!deviceDoc.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Device not found in the system.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device not found in the system.')));
         return;
       }
 
       final deviceData = deviceDoc.data() ?? {};
       final existingHouseholdId = deviceData['householdId'];
-
-      // --- 2️ Check if device already assigned to another household ---
-      if (existingHouseholdId != null &&
-          existingHouseholdId.toString().isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'This device is already assigned to another household.',
-            ),
-          ),
-        );
+      if (existingHouseholdId != null && existingHouseholdId.toString().isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This device is already assigned to another household.')));
         return;
       }
 
-      // --- 3️ Get user's household ID ---
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(user.email)
-          .get();
+      final userDoc = await _firestore.collection('users').doc(user.email).get();
       if (!userDoc.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User profile not found.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User profile not found.')));
         return;
       }
 
-      final userData = userDoc.data() ?? {};
-      final householdId = userData['householdId'];
-
+      final householdId = userDoc.data()?['householdId'];
       if (householdId == null || householdId.toString().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'You are not assigned to any household. Please contact administrator.',
-            ),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You are not assigned to any household.')));
         return;
       }
 
-      // --- 4️ Verify household exists ---
-      final householdDoc = await _firestore
-          .collection('households')
-          .doc(householdId)
-          .get();
+      final householdDoc = await _firestore.collection('households').doc(householdId).get();
       if (!householdDoc.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Your household does not exist.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Your household does not exist.')));
         return;
       }
 
-      print("=== ADDING DEVICE TO HOUSEHOLD ===");
-      print("Device ID: $id");
-      print("Household ID: $householdId");
-      print("User: ${user.email}");
+      if (mounted) setState(() => _isAddingDevice = true);
 
-      // Show full page loading
-      if (mounted) {
-        setState(() {
-          _isAddingDevice = true;
-        });
-      }
-
-      // --- 5️ Add device to household's device array in Firestore ---
+      // Add to household devices array
       await _firestore.collection('households').doc(householdId).set({
         'devices': FieldValue.arrayUnion([id]),
       }, SetOptions(merge: true));
 
-      print("✓ Added device to household Firestore array");
-
-      // --- 6️ Update device document to mark it as assigned in Firestore ---
+      // Update device doc
       await deviceRef.update({
         'householdId': householdId,
-        'status': false, // Initialize status to false
+        'status': false,
         'addedAt': FieldValue.serverTimestamp(),
       });
 
-      print("✓ Updated device Firestore document");
-
-      // --- 7️ CREATE REALTIME DATABASE ENTRY (SIMPLIFIED VERSION) ---
+      // Realtime DB setup
       final deviceType = deviceData['type'] ?? 'Unknown';
       final deviceName = deviceData['name'] ?? id;
-
       final realtimePath = '$householdId/$id';
-      print("=== REALTIME DATABASE CREATION ===");
-      print("Path: $realtimePath");
 
-      // Test Realtime DB connection first
       final canWriteToRTDB = await _testRealtimeDBWrite(householdId, id);
-
       if (canWriteToRTDB) {
         try {
-          print("🔄 Writing device data to Realtime Database...");
-
-          // Write only the essential data first
-          await _realtimeDB
-              .child('$realtimePath/status')
-              .set(false)
-              .timeout(
-                const Duration(seconds: 5),
-                onTimeout: () {
-                  throw TimeoutException("Realtime DB status write timeout");
-                },
-              );
-
-          print("✅ Basic device status written to Realtime DB");
-
-          // Add additional device info with separate writes
+          await _realtimeDB.child('$realtimePath/status').set(false).timeout(const Duration(seconds: 5));
           await _realtimeDB.child('$realtimePath/type').set(deviceType);
           await _realtimeDB.child('$realtimePath/name').set(deviceName);
-          await _realtimeDB
-              .child('$realtimePath/addedAt')
-              .set(DateTime.now().millisecondsSinceEpoch);
-
-          print("✅ All device data written to Realtime DB");
+          await _realtimeDB.child('$realtimePath/addedAt').set(DateTime.now().millisecondsSinceEpoch);
         } catch (e) {
-          print("❌ Error writing to Realtime DB: $e");
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Device added but Realtime Database setup had issues.',
-              ),
-              backgroundColor: Colors.orange,
-            ),
-          );
+          debugPrint("Realtime DB write error after adding device: $e");
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device added but Realtime Database setup had issues.'), backgroundColor: Colors.orange));
         }
       } else {
-        print("⚠️ Skipping Realtime DB setup due to connection issues");
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Device added but could not connect to Realtime Database.',
-            ),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device added but could not connect to Realtime Database.'), backgroundColor: Colors.orange));
       }
 
-      // --- 8️ Refresh UI ---
-      print("Refreshing UI...");
       await _loadUserDevices();
-      print("✓ UI refreshed");
 
-      // Hide loading indicator
-      if (mounted) {
-        setState(() {
-          _isAddingDevice = false;
-        });
-      }
+      if (mounted) setState(() => _isAddingDevice = false);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Device added to household successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      print("=== DEVICE ADDITION COMPLETED ===");
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device added to household successfully!'), backgroundColor: Colors.green));
     } catch (e) {
-      print("❌ ERROR IN _addDeviceById: $e");
       debugPrint('Error adding device: $e');
-
-      // Hide loading indicator on error
-      if (mounted) {
-        setState(() {
-          _isAddingDevice = false;
-        });
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error adding device: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) setState(() => _isAddingDevice = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error adding device: ${e.toString()}'), backgroundColor: Colors.red));
     }
   }
 
-  // Add device dialog pane
+  Future<bool> _testRealtimeDBWrite(String householdId, String deviceId) async {
+    try {
+      final testPath = '$householdId/test_$deviceId';
+      final testData = {'test': 'write_test', 'timestamp': DateTime.now().millisecondsSinceEpoch};
+      await _realtimeDB.child(testPath).set(testData).timeout(const Duration(seconds: 5));
+      final snapshot = await _realtimeDB.child(testPath).get().timeout(const Duration(seconds: 3));
+      if (snapshot.exists) {
+        await _realtimeDB.child(testPath).remove();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint("Realtime DB write test error: $e");
+      return false;
+    }
+  }
+
+  // Add device dialog pane (unchanged)
   Future<void> _showAddDeviceDialog() async {
     final inHousehold = await _isUserInHousehold();
     if (!inHousehold) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'You must be part of a household before adding a device.',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You must be part of a household before adding a device.')));
       return;
     }
 
@@ -555,48 +368,27 @@ class _HomePageState extends State<HomePage> with RouteAware {
             children: [
               const Text('Enter your Device ID:'),
               const SizedBox(height: 10),
-              TextField(
-                controller: controller,
-                decoration: const InputDecoration(
-                  hintText: 'Device ID',
-                  border: OutlineInputBorder(),
-                ),
-              ),
+              TextField(controller: controller, decoration: const InputDecoration(hintText: 'Device ID', border: OutlineInputBorder())),
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, null),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, "scan"),
-              child: const Text('Scan QR'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final id = controller.text.trim();
-                if (id.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter a Device ID')),
-                  );
-                  return;
-                }
-                Navigator.pop(context, id);
-              },
-              child: const Text('Add Device'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Cancel')),
+            ElevatedButton(onPressed: () => Navigator.pop(context, "scan"), child: const Text('Scan QR')),
+            ElevatedButton(onPressed: () {
+              final id = controller.text.trim();
+              if (id.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a Device ID')));
+                return;
+              }
+              Navigator.pop(context, id);
+            }, child: const Text('Add Device')),
           ],
         );
       },
     );
 
     if (res == "scan") {
-      final scannedId = await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const QRScannerPage()),
-      );
-
+      final scannedId = await Navigator.push(context, MaterialPageRoute(builder: (_) => const QRScannerPage()));
       if (scannedId != null && scannedId.toString().isNotEmpty) {
         await _addDeviceById(scannedId.toString());
       }
@@ -605,22 +397,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
   }
 
-  // Check if user is in household
   Future<bool> _isUserInHousehold() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return false;
     try {
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(user.email)
-          .get();
+      final userDoc = await _firestore.collection('users').doc(user.email).get();
       if (!userDoc.exists) return false;
       final householdId = userDoc.data()?['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return false;
-      final householdDoc = await _firestore
-          .collection('households')
-          .doc(householdId)
-          .get();
+      final householdDoc = await _firestore.collection('households').doc(householdId).get();
       return householdDoc.exists;
     } catch (e) {
       debugPrint('Error checking household: $e');
@@ -628,9 +413,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
   }
 
-  // ===========================================================================
+  // ========================
   // WEATHER METHODS
-  // ===========================================================================
+  // ========================
   Future<void> _loadWeather() async {
     try {
       await weatherAPI.fetchData();
@@ -640,10 +425,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
         _stateName = weatherAPI.stateName ?? "Unknown";
         _cityName = weatherAPI.cityName ?? "Unknown";
         _temp = weatherAPI.currentTemp;
-        _weatherLabel =
-            weatherAPI.weatherMain ??
-            weatherAPI.weatherDescription ??
-            "Weather";
+        _weatherLabel = weatherAPI.weatherMain ?? weatherAPI.weatherDescription ?? "Weather";
         _isLoadingWeather = false;
       });
     } catch (e) {
@@ -656,9 +438,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     String svgPath;
     if (id >= 200 && id < 300) {
       svgPath = 'lib/icons/weather/thunderstorm.svg';
-    } else if (id >= 300 && id < 500) {
-      svgPath = 'lib/icons/weather/rainy.svg';
-    } else if (id >= 500 && id < 600) {
+    } else if (id >= 300 && id < 600) {
       svgPath = 'lib/icons/weather/rainy.svg';
     } else if (id >= 600 && id < 700) {
       svgPath = 'lib/icons/weather/snowy.svg';
@@ -672,82 +452,76 @@ class _HomePageState extends State<HomePage> with RouteAware {
       svgPath = 'lib/icons/weather/cloudy.svg';
     }
 
-    return SvgPicture.asset(
-      svgPath,
-      width: size,
-      height: size,
-      color: Colors.white,
-    );
+    return SvgPicture.asset(svgPath, width: size, height: size, color: Colors.white);
   }
 
-  // ===========================================================================
+  // ========================
+  // NOTIFICATION METHODS
+  // ========================
+  void _listenToNotifications() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Cancel previous subscription (safe guard)
+    _notificationSubscription?.cancel();
+
+    _notificationSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.email)
+        .collection('notifications')
+        .where('read', isEqualTo: false)
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+      setState(() {
+        _unreadNotificationCount = snapshot.docs.length;
+      });
+    }, onError: (e) {
+      debugPrint('Notification listener error: $e');
+    });
+  }
+
+  // ========================
   // AUTHENTICATION METHODS
-  // ===========================================================================
+  // ========================
   Future<void> _signout() async {
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
-    );
+    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginPage()), (route) => false);
   }
 
-  // ===========================================================================
+  // ========================
   // DEVICE CONTROL METHODS
-  // ===========================================================================
+  // ========================
   void powerSwitchChanged(bool value, String deviceId) async {
-    print("=== SWITCH TOGGLED ===");
-    print("Device ID: $deviceId");
-    print("New Status: $value");
+    debugPrint("Switch changed for $deviceId -> $value");
 
     try {
-      // Get current user's household ID
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(user.email)
-          .get();
-
+      final userDoc = await _firestore.collection('users').doc(user.email).get();
       final householdId = userDoc.data()?['householdId'];
       if (householdId == null || householdId.toString().isEmpty) {
-        print("✗ No household ID found for user");
+        debugPrint("No householdId found for user");
         return;
       }
 
-      print("Household ID: $householdId");
-
-      // Update local state for immediate UI response
+      // Update local state immediately
       _deviceStatus.value = {..._deviceStatus.value, deviceId: value};
 
-      // Update Firestore for data persistence
+      // Persist to Firestore
       await _firestore.collection('devices').doc(deviceId).update({
         'status': value,
         'lastUpdated': FieldValue.serverTimestamp(),
       });
-      print("✓ Updated Firestore: devices/$deviceId = $value");
 
-      // Update Realtime Database under household path
+      // Persist to Realtime DB
       await _realtimeDB.child('$householdId/$deviceId/status').set(value);
-      print("✓ Updated Realtime DB: $householdId/$deviceId/status = $value");
-
-      // Verify the write
-      final snapshot = await _realtimeDB
-          .child('$householdId/$deviceId/status')
-          .get();
-      if (snapshot.exists) {
-        print(
-          "✓ Verification - Current value in Realtime DB: ${snapshot.value}",
-        );
-      } else {
-        print("✗ Verification failed - No data at path");
-      }
     } catch (e) {
-      print("✗ Error controlling device: $e");
-      // Revert local state on error
-      _deviceStatus.value = {..._deviceStatus.value, deviceId: !value};
+      debugPrint("Error toggling device: $e");
+      // revert local state
+      _deviceStatus.value = {..._deviceStatus.value, deviceId: !_deviceStatus.value[deviceId]!};
     }
   }
 
@@ -759,41 +533,33 @@ class _HomePageState extends State<HomePage> with RouteAware {
     );
   }
 
-  String _getStatusText(String deviceId, String deviceType) {
-    return _deviceStatus.value[deviceId] == true ? 'On' : 'Off';
-  }
+  String _getStatusText(String deviceId, String deviceType) => _deviceStatus.value[deviceId] == true ? 'On' : 'Off';
 
-  Color _getStatusColor(String deviceId, String deviceType) {
-    return _deviceStatus.value[deviceId] == true ? Colors.green : Colors.red;
-  }
+  Color _getStatusColor(String deviceId, String deviceType) => _deviceStatus.value[deviceId] == true ? Colors.green : Colors.red;
 
-  // ===========================================================================
+  // ========================
   // ACTIVITY LOGGING
-  // ===========================================================================
+  // ========================
   Future<void> logActivity({required String action, String? deviceId}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     final userDoc = await _firestore.collection('users').doc(user.email).get();
-
     final userData = userDoc.data() ?? {};
     final householdId = userData['householdId'];
     final username = userData['username'] ?? "Unknown User";
 
     if (householdId == null) return;
 
-    await _firestore
-        .collection('households')
-        .doc(householdId)
-        .collection('activityLogs')
-        .add({
-          'userId': user.uid,
-          'username': username,
-          'deviceId': deviceId,
-          'action': action,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
+    await _firestore.collection('households').doc(householdId).collection('activityLogs').add({
+      'userId': user.uid,
+      'username': username,
+      'deviceId': deviceId,
+      'action': action,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
+
 
   // ===========================================================================
   // BUILD METHOD
@@ -934,56 +700,92 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ===========================================================
-                      // TOP APP BAR
-                      // ===========================================================
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: horizontalPadding - 10,
-                          vertical: verticalPadding,
+                    // ===========================================================
+                   // TOP APP BAR
+                   // ===========================================================
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: horizontalPadding - 10,
+                      vertical: verticalPadding,
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.menu,
+                            size: iconSize,
+                            color: Colors.white,
+                          ),
+                          onPressed: () => drawerController.toggleDrawer(),
                         ),
-                        child: Row(
+                        const Spacer(),
+
+                        // ===================================
+                        // NOTIFICATION BELL WITH RED DOT
+                        // ===================================
+                        Stack(
+                          clipBehavior: Clip.none, // Ensure badge is visible outside bounds
                           children: [
-                            IconButton(
-                              icon: Icon(
-                                Icons.menu,
-                                size: iconSize,
-                                color: Colors.white,
-                              ),
-                              onPressed: _isAddingDevice
-                                  ? null
-                                  : () => drawerController.toggleDrawer(),
-                            ),
-                            const Spacer(),
                             IconButton(
                               icon: Icon(
                                 Icons.notifications,
                                 size: iconSize,
                                 color: Colors.white,
                               ),
-                              onPressed: _isAddingDevice
-                                  ? null
-                                  : () async {
-                                      await Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => NotificationPage(),
-                                        ),
-                                      );
-                                      if (!mounted) return;
-                                      await _loadUserDevices();
-                                    },
+                              onPressed: () async {
+                                // Open notification page
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const NotificationPage(),
+                                  ),
+                                );
+
+                                // Refresh devices / notifications after returning
+                                if (!mounted) return;
+                                await _loadUserDevices();
+                              },
                             ),
+
+                            // Red dot / unread badge
+                            if (_unreadNotificationCount > 0)
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  constraints: BoxConstraints(
+                                    minWidth: iconSize * 0.4,
+                                    minHeight: iconSize * 0.4,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      _unreadNotificationCount.toString(),
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: iconSize * 0.25,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+
+                             // Add Device Button
                             IconButton(
                               icon: Icon(
                                 Icons.add_circle,
                                 size: iconSize,
                                 color: Colors.white,
                               ),
-                              onPressed: _isAddingDevice
-                                  ? null
-                                  : _showAddDeviceDialog,
-                            ),
+                              onPressed: _showAddDeviceDialog,
+                             ),
                           ],
                         ),
                       ),

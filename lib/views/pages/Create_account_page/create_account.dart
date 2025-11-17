@@ -126,7 +126,7 @@ class CreateAccountState extends State<CreateAccount> {
       // Save user profile in Firestore
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(widget.email) // use email as document ID
+          .doc(widget.email)
           .set({
             'uid': userCredential.user!.uid,
             'username': usernameController.text.trim(),
@@ -161,7 +161,7 @@ class CreateAccountState extends State<CreateAccount> {
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
-      resizeToAvoidBottomInset: true, // important for keyboard
+      resizeToAvoidBottomInset: true,
       body: Container(
         height: double.infinity,
         decoration: const BoxDecoration(
@@ -180,6 +180,24 @@ class CreateAccountState extends State<CreateAccount> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const SizedBox(height: 20),
+
+                // Back button like SignUpPage
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: CircleAvatar(
+                    backgroundColor: Colors.white.withAlpha(30),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: Colors.white,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
                 const Text(
                   "CREATE ACCOUNT",
                   style: TextStyle(
@@ -188,6 +206,7 @@ class CreateAccountState extends State<CreateAccount> {
                     color: Colors.white,
                   ),
                 ),
+
                 const SizedBox(height: 30),
 
                 // User info summary
@@ -213,6 +232,7 @@ class CreateAccountState extends State<CreateAccount> {
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 30),
 
                 // Username & Password fields
@@ -310,12 +330,13 @@ class CreateAccountState extends State<CreateAccount> {
                           ),
                           child: const Text(
                             'Create Account',
-                            style: TextStyle(fontSize: 16, color: Colors.white),
+                            style:
+                                TextStyle(fontSize: 16, color: Colors.white),
                           ),
                         ),
                       ),
 
-                      // Add extra spacing for keyboard
+                      // Extra spacing for keyboard
                       SizedBox(height: screenHeight * 0.05),
                     ],
                   ),

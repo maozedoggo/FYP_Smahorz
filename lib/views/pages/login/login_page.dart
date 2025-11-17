@@ -99,7 +99,7 @@ class _LoginPageState extends State<LoginPage> {
       );
     } on FirebaseAuthException catch (e) {
       Navigator.pop(context); // close loading dialog
-      String message = "Login failed";
+      String message = "Login failed. Incorrect email/username or password. Please try again.";
       if (e.code == 'user-not-found') {
         message = "No user found with this email";
       } else if (e.code == 'wrong-password') {
