@@ -32,7 +32,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final DatabaseReference _realtimeDB = FirebaseDatabase.instanceFor(
     app: Firebase.app(),
-    databaseURL: "https://smahorz-fyp-default-rtdb.asia-southeast1.firebasedatabase.app",
+    databaseURL:
+        "https://smahorz-fyp-default-rtdb.asia-southeast1.firebasedatabase.app",
   ).ref();
 
   Timer? _weatherCheckTimer;
@@ -133,10 +134,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 final data = documentSnapshot.data();
                 if (data != null && data.containsKey('status')) {
                   final statusData = data['status'];
-                  
+
                   if (deviceType.contains('parcel')) {
-                    final bool insideStatus = statusData is Map ? statusData['insideStatus'] == true : false;
-                    final bool outsideStatus = statusData is Map ? statusData['outsideStatus'] == true : false;
+                    final bool insideStatus = statusData is Map
+                        ? statusData['insideStatus'] == true
+                        : false;
+                    final bool outsideStatus = statusData is Map
+                        ? statusData['outsideStatus'] == true
+                        : false;
 
                     _deviceStatus.value = {
                       ..._deviceStatus.value,
@@ -146,7 +151,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
                       },
                     };
                   } else {
-                    final bool isOn = statusData == true || (statusData is Map ? statusData['status'] == true : false);
+                    final bool isOn =
+                        statusData == true ||
+                        (statusData is Map
+                            ? statusData['status'] == true
+                            : false);
                     _deviceStatus.value = {
                       ..._deviceStatus.value,
                       deviceId: isOn,
@@ -183,52 +192,40 @@ class _HomePageState extends State<HomePage> with RouteAware {
     for (final device in _devices) {
       final deviceId = device['id'];
       final deviceType = device['type']?.toString().toLowerCase() ?? '';
-      
+
       if (deviceType.contains('parcel')) {
         final insidePath = '$householdId/$deviceId/insideStatus';
         final outsidePath = '$householdId/$deviceId/outsideStatus';
 
-        _realtimeDB.child(insidePath).onValue.listen(
-          (DatabaseEvent event) {
-            if (event.snapshot.exists && mounted) {
-              final insideStatus = event.snapshot.value == true;
-              final currentStatus = _deviceStatus.value[deviceId] ?? {};
-              _deviceStatus.value = {
-                ..._deviceStatus.value,
-                deviceId: {
-                  ...currentStatus,
-                  'insideStatus': insideStatus,
-                },
-              };
-            }
-          },
-        );
+        _realtimeDB.child(insidePath).onValue.listen((DatabaseEvent event) {
+          if (event.snapshot.exists && mounted) {
+            final insideStatus = event.snapshot.value == true;
+            final currentStatus = _deviceStatus.value[deviceId] ?? {};
+            _deviceStatus.value = {
+              ..._deviceStatus.value,
+              deviceId: {...currentStatus, 'insideStatus': insideStatus},
+            };
+          }
+        });
 
-        _realtimeDB.child(outsidePath).onValue.listen(
-          (DatabaseEvent event) {
-            if (event.snapshot.exists && mounted) {
-              final outsideStatus = event.snapshot.value == true;
-              final currentStatus = _deviceStatus.value[deviceId] ?? {};
-              _deviceStatus.value = {
-                ..._deviceStatus.value,
-                deviceId: {
-                  ...currentStatus,
-                  'outsideStatus': outsideStatus,
-                },
-              };
-            }
-          },
-        );
+        _realtimeDB.child(outsidePath).onValue.listen((DatabaseEvent event) {
+          if (event.snapshot.exists && mounted) {
+            final outsideStatus = event.snapshot.value == true;
+            final currentStatus = _deviceStatus.value[deviceId] ?? {};
+            _deviceStatus.value = {
+              ..._deviceStatus.value,
+              deviceId: {...currentStatus, 'outsideStatus': outsideStatus},
+            };
+          }
+        });
       } else {
         final path = '$householdId/$deviceId/status';
-        _realtimeDB.child(path).onValue.listen(
-          (DatabaseEvent event) {
-            if (event.snapshot.exists && mounted) {
-              final bool isOn = event.snapshot.value == true;
-              _deviceStatus.value = {..._deviceStatus.value, deviceId: isOn};
-            }
-          },
-        );
+        _realtimeDB.child(path).onValue.listen((DatabaseEvent event) {
+          if (event.snapshot.exists && mounted) {
+            final bool isOn = event.snapshot.value == true;
+            _deviceStatus.value = {..._deviceStatus.value, deviceId: isOn};
+          }
+        });
       }
     }
   }
@@ -241,17 +238,25 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final userDoc = await _firestore.collection('users').doc(user.email).get();
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(user.email)
+          .get();
       if (!userDoc.exists) return;
 
       final userData = userDoc.data() ?? {};
       final householdId = userData['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return;
 
-      final householdDoc = await _firestore.collection('households').doc(householdId).get();
+      final householdDoc = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .get();
       if (!householdDoc.exists) return;
 
-      final deviceIds = List<String>.from(householdDoc.data()?['devices'] ?? []);
+      final deviceIds = List<String>.from(
+        householdDoc.data()?['devices'] ?? [],
+      );
       final loaded = <Map<String, dynamic>>[];
       final statusMap = <String, dynamic>{};
 
@@ -264,13 +269,17 @@ class _HomePageState extends State<HomePage> with RouteAware {
           'name': dd['name'] ?? id,
           'type': dd['type'] ?? 'Unknown',
         });
-        
+
         final deviceType = dd['type']?.toString().toLowerCase() ?? '';
         if (deviceType.contains('parcel')) {
           final statusData = dd['status'];
           statusMap[id] = {
-            'insideStatus': statusData is Map ? statusData['insideStatus'] ?? false : false,
-            'outsideStatus': statusData is Map ? statusData['outsideStatus'] ?? false : false,
+            'insideStatus': statusData is Map
+                ? statusData['insideStatus'] ?? false
+                : false,
+            'outsideStatus': statusData is Map
+                ? statusData['outsideStatus'] ?? false
+                : false,
           };
         } else {
           statusMap[id] = dd['status'] ?? false;
@@ -293,7 +302,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You must be logged in to add a device.')),
+          const SnackBar(
+            content: Text('You must be logged in to add a device.'),
+          ),
         );
         return;
       }
@@ -311,14 +322,22 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final deviceData = deviceDoc.data() ?? {};
       final existingHouseholdId = deviceData['householdId'];
 
-      if (existingHouseholdId != null && existingHouseholdId.toString().isNotEmpty) {
+      if (existingHouseholdId != null &&
+          existingHouseholdId.toString().isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This device is already assigned to another household.')),
+          const SnackBar(
+            content: Text(
+              'This device is already assigned to another household.',
+            ),
+          ),
         );
         return;
       }
 
-      final userDoc = await _firestore.collection('users').doc(user.email).get();
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(user.email)
+          .get();
       if (!userDoc.exists) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('User profile not found.')),
@@ -331,12 +350,17 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
       if (householdId == null || householdId.toString().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You are not assigned to any household.')),
+          const SnackBar(
+            content: Text('You are not assigned to any household.'),
+          ),
         );
         return;
       }
 
-      final householdDoc = await _firestore.collection('households').doc(householdId).get();
+      final householdDoc = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .get();
       if (!householdDoc.exists) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Your household does not exist.')),
@@ -357,10 +381,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
       await deviceRef.update({
         'householdId': householdId,
-        'status': deviceType.toLowerCase().contains('parcel') ? {
-          'insideStatus': false,
-          'outsideStatus': false,
-        } : false,
+        'status': deviceType.toLowerCase().contains('parcel')
+            ? {'insideStatus': false, 'outsideStatus': false}
+            : false,
         'addedAt': FieldValue.serverTimestamp(),
       });
 
@@ -374,7 +397,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
       await _realtimeDB.child('$realtimePath/type').set(deviceType);
       await _realtimeDB.child('$realtimePath/name').set(deviceName);
-      await _realtimeDB.child('$realtimePath/addedAt').set(DateTime.now().millisecondsSinceEpoch);
+      await _realtimeDB
+          .child('$realtimePath/addedAt')
+          .set(DateTime.now().millisecondsSinceEpoch);
 
       await _loadUserDevices();
 
@@ -383,7 +408,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Device added to household successfully!'), backgroundColor: Colors.green),
+        const SnackBar(
+          content: Text('Device added to household successfully!'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
       debugPrint('Error adding device: $e');
@@ -391,7 +419,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
         setState(() => _isAddingDevice = false);
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error adding device: ${e.toString()}'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Error adding device: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -400,7 +431,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
     final inHousehold = await _isUserInHousehold();
     if (!inHousehold) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You must be part of a household before adding a device.')),
+        const SnackBar(
+          content: Text(
+            'You must be part of a household before adding a device.',
+          ),
+        ),
       );
       return;
     }
@@ -418,18 +453,29 @@ class _HomePageState extends State<HomePage> with RouteAware {
               const SizedBox(height: 10),
               TextField(
                 controller: controller,
-                decoration: const InputDecoration(hintText: 'Device ID', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  hintText: 'Device ID',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Cancel')),
-            ElevatedButton(onPressed: () => Navigator.pop(context, "scan"), child: const Text('Scan QR')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, "scan"),
+              child: const Text('Scan QR'),
+            ),
             ElevatedButton(
               onPressed: () {
                 final id = controller.text.trim();
                 if (id.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a Device ID')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a Device ID')),
+                  );
                   return;
                 }
                 Navigator.pop(context, id);
@@ -442,7 +488,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
     );
 
     if (res == "scan") {
-      final scannedId = await Navigator.push(context, MaterialPageRoute(builder: (_) => const QRScannerPage()));
+      final scannedId = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const QRScannerPage()),
+      );
       if (scannedId != null && scannedId.toString().isNotEmpty) {
         await _addDeviceById(scannedId.toString());
       }
@@ -455,11 +504,17 @@ class _HomePageState extends State<HomePage> with RouteAware {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return false;
     try {
-      final userDoc = await _firestore.collection('users').doc(user.email).get();
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(user.email)
+          .get();
       if (!userDoc.exists) return false;
       final householdId = userDoc.data()?['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return false;
-      final householdDoc = await _firestore.collection('households').doc(householdId).get();
+      final householdDoc = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .get();
       return householdDoc.exists;
     } catch (e) {
       debugPrint('Error checking household: $e');
@@ -470,38 +525,53 @@ class _HomePageState extends State<HomePage> with RouteAware {
   // ===========================================================================
   // DEVICE CONTROL METHODS
   // ===========================================================================
-  void powerSwitchChanged(bool value, String deviceId, [String switchType = 'status']) async {
+  void powerSwitchChanged(
+    bool value,
+    String deviceId, [
+    String switchType = 'status',
+  ]) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      final userDoc = await _firestore.collection('users').doc(user.email).get();
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(user.email)
+          .get();
       final householdId = userDoc.data()?['householdId'];
       if (householdId == null || householdId.toString().isEmpty) return;
 
       _updateLocalDeviceStatus(deviceId, switchType, value);
 
-      final updateData = switchType == 'status' 
-          ? {'status': value}
-          : {'status.$switchType': value};
-      updateData['lastUpdated'] = FieldValue.serverTimestamp();
-      
+      // FIX: Create the complete update data in one step
+      final updateData = switchType == 'status'
+          ? {'status': value, 'lastUpdated': FieldValue.serverTimestamp()}
+          : {
+              'status.$switchType': value,
+              'lastUpdated': FieldValue.serverTimestamp(),
+            };
+
       await _firestore.collection('devices').doc(deviceId).update(updateData);
 
       final path = switchType == 'status' ? 'status' : switchType;
       await _realtimeDB.child('$householdId/$deviceId/$path').set(value);
-
     } catch (e) {
       print("Error controlling device: $e");
       _updateLocalDeviceStatus(deviceId, switchType, !value);
     }
   }
 
-  void _updateLocalDeviceStatus(String deviceId, String switchType, bool value) {
+  void _updateLocalDeviceStatus(
+    String deviceId,
+    String switchType,
+    bool value,
+  ) {
     final currentStatus = _deviceStatus.value[deviceId];
-    
+
     if (switchType == 'insideStatus' || switchType == 'outsideStatus') {
-      final Map<String, dynamic> statusMap = currentStatus is Map ? Map<String, dynamic>.from(currentStatus) : {};
+      final Map<String, dynamic> statusMap = currentStatus is Map
+          ? Map<String, dynamic>.from(currentStatus)
+          : {};
       statusMap[switchType] = value;
       _deviceStatus.value = {..._deviceStatus.value, deviceId: statusMap};
     } else {
@@ -520,13 +590,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
   String _getStatusText(String deviceId, String deviceType) {
     final status = _deviceStatus.value[deviceId];
     final deviceTypeLower = deviceType.toLowerCase();
-    
+
     if (deviceTypeLower.contains('parcel')) {
       final inside = status is Map ? status['insideStatus'] ?? false : false;
       final outside = status is Map ? status['outsideStatus'] ?? false : false;
       return 'In: ${inside ? 'On' : 'Off'}, Out: ${outside ? 'On' : 'Off'}';
     } else {
-      final isOn = status == true || (status is Map ? status['status'] ?? false : false);
+      final isOn =
+          status == true || (status is Map ? status['status'] ?? false : false);
       return isOn ? 'On' : 'Off';
     }
   }
@@ -534,13 +605,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Color _getStatusColor(String deviceId, String deviceType) {
     final status = _deviceStatus.value[deviceId];
     final deviceTypeLower = deviceType.toLowerCase();
-    
+
     if (deviceTypeLower.contains('parcel')) {
       final inside = status is Map ? status['insideStatus'] ?? false : false;
       final outside = status is Map ? status['outsideStatus'] ?? false : false;
       return (inside || outside) ? Colors.green : Colors.red;
     } else {
-      final isOn = status == true || (status is Map ? status['status'] ?? false : false);
+      final isOn =
+          status == true || (status is Map ? status['status'] ?? false : false);
       return isOn ? Colors.green : Colors.red;
     }
   }
@@ -558,7 +630,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
         _stateName = _weatherService.stateName ?? "Unknown";
         _cityName = _weatherService.cityName ?? "Unknown";
         _temp = _weatherService.currentTemp;
-        _weatherLabel = _weatherService.weatherMain ?? _weatherService.weatherDescription ?? "Weather";
+        _weatherLabel =
+            _weatherService.weatherMain ??
+            _weatherService.weatherDescription ??
+            "Weather";
         _isLoadingWeather = false;
       });
     } catch (e) {
@@ -587,7 +662,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
       svgPath = 'lib/icons/weather/cloudy.svg';
     }
 
-    return SvgPicture.asset(svgPath, width: size, height: size, color: Colors.white);
+    return SvgPicture.asset(
+      svgPath,
+      width: size,
+      height: size,
+      color: Colors.white,
+    );
   }
 
   // ===========================================================================
@@ -613,7 +693,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   Future<void> _navigateToDevicePage(Map<String, dynamic> dev) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => _pageForDevice(dev)));
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => _pageForDevice(dev)),
+    );
     if (mounted) await _loadUserDevices();
   }
 
@@ -641,7 +724,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
             openRatio: 0.65,
             animationCurve: Curves.easeInOutSine,
             animateChildDecoration: true,
-            childDecoration: BoxDecoration(borderRadius: BorderRadius.circular(20)),
+            childDecoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+            ),
             backdropColor: const Color.fromARGB(255, 22, 22, 22),
             drawer: Container(
               color: const Color.fromARGB(255, 36, 36, 36),
@@ -657,17 +742,23 @@ class _HomePageState extends State<HomePage> with RouteAware {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             ListTile(
-                              onTap: _isAddingDevice ? null : () => _drawerController.hideDrawer(),
+                              onTap: _isAddingDevice
+                                  ? null
+                                  : () => _drawerController.hideDrawer(),
                               leading: const Icon(Icons.home),
                               title: const Text('Home'),
                             ),
                             ListTile(
-                              onTap: _isAddingDevice ? null : () => _navigateToPage(ProfilePage()),
+                              onTap: _isAddingDevice
+                                  ? null
+                                  : () => _navigateToPage(ProfilePage()),
                               leading: const Icon(Icons.account_circle_rounded),
                               title: const Text('Profile'),
                             ),
                             ListTile(
-                              onTap: _isAddingDevice ? null : () => _navigateToPage(SettingsPage()),
+                              onTap: _isAddingDevice
+                                  ? null
+                                  : () => _navigateToPage(SettingsPage()),
                               leading: const Icon(Icons.settings),
                               title: const Text('Settings'),
                             ),
@@ -677,13 +768,29 @@ class _HomePageState extends State<HomePage> with RouteAware {
                       Center(
                         child: TextButton.icon(
                           onPressed: _isAddingDevice ? null : _signout,
-                          icon: Icon(Icons.logout_rounded, color: Colors.red[700], size: iconSize),
-                          label: Text("Logout", style: TextStyle(color: Colors.red[700], fontSize: subtitleFontSize)),
+                          icon: Icon(
+                            Icons.logout_rounded,
+                            color: Colors.red[700],
+                            size: iconSize,
+                          ),
+                          label: Text(
+                            "Logout",
+                            style: TextStyle(
+                              color: Colors.red[700],
+                              fontSize: subtitleFontSize,
+                            ),
+                          ),
                         ),
                       ),
                       DefaultTextStyle(
-                        style: TextStyle(fontSize: screenWidth * 0.03, color: Colors.white),
-                        child: Container(margin: const EdgeInsets.symmetric(vertical: 16.0), child: const Text('Smart Horizon Home')),
+                        style: TextStyle(
+                          fontSize: screenWidth * 0.03,
+                          color: Colors.white,
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 16.0),
+                          child: const Text('Smart Horizon Home'),
+                        ),
                       ),
                     ],
                   ),
@@ -698,7 +805,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0xFF0063A1), Color(0xFF0982BA), Color(0xFF04111C)],
+                    colors: [
+                      Color(0xFF0063A1),
+                      Color(0xFF0982BA),
+                      Color(0xFF04111C),
+                    ],
                     stops: [0.21, 0.41, 1.0],
                   ),
                 ),
@@ -708,21 +819,42 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     children: [
                       // TOP APP BAR
                       Padding(
-                        padding: EdgeInsets.symmetric(horizontal: horizontalPadding - 10, vertical: verticalPadding),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding - 10,
+                          vertical: verticalPadding,
+                        ),
                         child: Row(
                           children: [
                             IconButton(
-                              icon: Icon(Icons.menu, size: iconSize, color: Colors.white),
-                              onPressed: _isAddingDevice ? null : () => _drawerController.toggleDrawer(),
+                              icon: Icon(
+                                Icons.menu,
+                                size: iconSize,
+                                color: Colors.white,
+                              ),
+                              onPressed: _isAddingDevice
+                                  ? null
+                                  : () => _drawerController.toggleDrawer(),
                             ),
                             const Spacer(),
                             IconButton(
-                              icon: Icon(Icons.notifications, size: iconSize, color: Colors.white),
-                              onPressed: _isAddingDevice ? null : () => _navigateToPage(NotificationPage()),
+                              icon: Icon(
+                                Icons.notifications,
+                                size: iconSize,
+                                color: Colors.white,
+                              ),
+                              onPressed: _isAddingDevice
+                                  ? null
+                                  : () => _navigateToPage(NotificationPage()),
                             ),
                             IconButton(
-                              icon: Icon(Icons.add_circle, size: iconSize, color: Colors.white),
-                              onPressed: _isAddingDevice ? null : _showAddDeviceDialog,
+                              icon: Icon(
+                                Icons.add_circle,
+                                size: iconSize,
+                                color: Colors.white,
+                              ),
+                              onPressed: _isAddingDevice
+                                  ? null
+                                  : _showAddDeviceDialog,
                             ),
                           ],
                         ),
@@ -730,54 +862,203 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
                       // WELCOME SECTION
                       Padding(
-                        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("Welcome Home", style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold, color: Colors.white, shadows: const [Shadow(blurRadius: 4, color: Colors.black54, offset: Offset(1, 2))])),
+                            Text(
+                              "Welcome Home",
+                              style: TextStyle(
+                                fontSize: titleFontSize,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                shadows: const [
+                                  Shadow(
+                                    blurRadius: 4,
+                                    color: Colors.black54,
+                                    offset: Offset(1, 2),
+                                  ),
+                                ],
+                              ),
+                            ),
                             if (userEmail != null)
                               StreamBuilder<DocumentSnapshot>(
-                                stream: _firestore.collection("users").doc(userEmail).snapshots(),
+                                stream: _firestore
+                                    .collection("users")
+                                    .doc(userEmail)
+                                    .snapshots(),
                                 builder: (context, snapshot) {
-                                  if (snapshot.connectionState == ConnectionState.waiting) return Text("...", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white70));
-                                  if (!snapshot.hasData || !snapshot.data!.exists) return Text("No username", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white70));
-                                  final data = snapshot.data!.data() as Map<String, dynamic>?;
-                                  return Text(data?['username'] ?? "", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white, shadows: const [Shadow(blurRadius: 2, color: Colors.black54, offset: Offset(0.5, 1))]));
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting)
+                                    return Text(
+                                      "...",
+                                      style: TextStyle(
+                                        fontSize: subtitleFontSize,
+                                        color: Colors.white70,
+                                      ),
+                                    );
+                                  if (!snapshot.hasData ||
+                                      !snapshot.data!.exists)
+                                    return Text(
+                                      "No username",
+                                      style: TextStyle(
+                                        fontSize: subtitleFontSize,
+                                        color: Colors.white70,
+                                      ),
+                                    );
+                                  final data =
+                                      snapshot.data!.data()
+                                          as Map<String, dynamic>?;
+                                  return Text(
+                                    data?['username'] ?? "",
+                                    style: TextStyle(
+                                      fontSize: subtitleFontSize,
+                                      color: Colors.white,
+                                      shadows: const [
+                                        Shadow(
+                                          blurRadius: 2,
+                                          color: Colors.black54,
+                                          offset: Offset(0.5, 1),
+                                        ),
+                                      ],
+                                    ),
+                                  );
                                 },
                               )
                             else
-                              Text("Not logged in", style: TextStyle(fontSize: subtitleFontSize, color: Colors.white70)),
+                              Text(
+                                "Not logged in",
+                                style: TextStyle(
+                                  fontSize: subtitleFontSize,
+                                  color: Colors.white70,
+                                ),
+                              ),
                           ],
                         ),
                       ),
 
-                      Padding(padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 8), child: Divider(thickness: 3, color: Colors.white38)),
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding,
+                          vertical: 8,
+                        ),
+                        child: Divider(thickness: 3, color: Colors.white38),
+                      ),
 
                       // WEATHER CARD
                       Padding(
-                        padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding,
+                          vertical: verticalPadding,
+                        ),
                         child: Container(
                           decoration: BoxDecoration(
                             color: const Color.fromRGBO(255, 255, 255, 0.15),
-                            borderRadius: BorderRadius.circular(screenWidth * 0.05),
-                            border: Border.all(color: const Color.fromRGBO(255, 255, 255, 0.1), width: 1),
-                            boxShadow: const [BoxShadow(color: Color.fromRGBO(255, 255, 255, 0.15), blurRadius: 8, offset: Offset(0, 4))],
+                            borderRadius: BorderRadius.circular(
+                              screenWidth * 0.05,
+                            ),
+                            border: Border.all(
+                              color: const Color.fromRGBO(255, 255, 255, 0.1),
+                              width: 1,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color.fromRGBO(255, 255, 255, 0.15),
+                                blurRadius: 8,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
                           ),
-                          padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: screenHeight * 0.02),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: horizontalPadding,
+                            vertical: screenHeight * 0.02,
+                          ),
                           child: _isLoadingWeather
-                              ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                              ? const Center(
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                  ),
+                                )
                               : Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    _weatherIconForId(_weatherService.statusID, size: screenWidth * 0.15),
-                                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                      ConstrainedBox(constraints: BoxConstraints(maxWidth: screenWidth * 0.25), child: Text(_weatherLabel, style: TextStyle(fontSize: subtitleFontSize, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                      Text("$_temp°C", style: TextStyle(fontSize: subtitleFontSize * 1.5, fontWeight: FontWeight.bold, color: Colors.white, shadows: const [Shadow(blurRadius: 4, color: Colors.black45, offset: Offset(1, 2))])),
-                                    ]),
-                                    ConstrainedBox(constraints: BoxConstraints(maxWidth: screenWidth * 0.3), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                      Text(_cityName, style: TextStyle(fontSize: subtitleFontSize, color: Colors.white)),
-                                      Text(_stateName, style: TextStyle(fontSize: subtitleFontSize * 1.5, fontWeight: FontWeight.bold, color: Colors.white, shadows: const [Shadow(blurRadius: 4, color: Colors.black54, offset: Offset(1, 2))]), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                    ])),
+                                    _weatherIconForId(
+                                      _weatherService.statusID,
+                                      size: screenWidth * 0.15,
+                                    ),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        ConstrainedBox(
+                                          constraints: BoxConstraints(
+                                            maxWidth: screenWidth * 0.25,
+                                          ),
+                                          child: Text(
+                                            _weatherLabel,
+                                            style: TextStyle(
+                                              fontSize: subtitleFontSize,
+                                              color: Colors.white,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Text(
+                                          "$_temp°C",
+                                          style: TextStyle(
+                                            fontSize: subtitleFontSize * 1.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                            shadows: const [
+                                              Shadow(
+                                                blurRadius: 4,
+                                                color: Colors.black45,
+                                                offset: Offset(1, 2),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxWidth: screenWidth * 0.3,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _cityName,
+                                            style: TextStyle(
+                                              fontSize: subtitleFontSize,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          Text(
+                                            _stateName,
+                                            style: TextStyle(
+                                              fontSize: subtitleFontSize * 1.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                              shadows: const [
+                                                Shadow(
+                                                  blurRadius: 4,
+                                                  color: Colors.black54,
+                                                  offset: Offset(1, 2),
+                                                ),
+                                              ],
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                 ),
                         ),
@@ -790,34 +1071,66 @@ class _HomePageState extends State<HomePage> with RouteAware {
                           builder: (context, statusMap, _) {
                             if (_devices.isEmpty) {
                               return Center(
-                                child: Column(mainAxisSize: MainAxisSize.min, children: const [
-                                  Icon(Icons.device_hub, size: 56, color: Colors.white24),
-                                  SizedBox(height: 12),
-                                  Text("No devices added yet", style: TextStyle(color: Colors.white70, fontSize: 16)),
-                                  SizedBox(height: 12),
-                                ]),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(
+                                      Icons.device_hub,
+                                      size: 56,
+                                      color: Colors.white24,
+                                    ),
+                                    SizedBox(height: 12),
+                                    Text(
+                                      "No devices added yet",
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    SizedBox(height: 12),
+                                  ],
+                                ),
                               );
                             }
 
                             return GridView.builder(
-                              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                              itemCount: _devices.length,
-                              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: screenWidth * 0.5,
-                                childAspectRatio: 0.8,
-                                mainAxisSpacing: screenHeight * 0.02,
-                                crossAxisSpacing: screenWidth * 0.03,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: horizontalPadding,
                               ),
+                              itemCount: _devices.length,
+                              gridDelegate:
+                                  SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: screenWidth * 0.5,
+                                    childAspectRatio: 0.8,
+                                    mainAxisSpacing: screenHeight * 0.02,
+                                    crossAxisSpacing: screenWidth * 0.03,
+                                  ),
                               itemBuilder: (context, index) {
                                 final dev = _devices[index];
-                                final type = (dev['type'] ?? '').toString().toLowerCase();
-                                final iconPath = type.contains('clothe') || type.contains('hanger') ? 'lib/icons/drying-rack.png' : type.contains('parcel') ? 'lib/icons/parcel-box.png' : 'lib/icons/door-open.png';
+                                final type = (dev['type'] ?? '')
+                                    .toString()
+                                    .toLowerCase();
+                                final iconPath =
+                                    type.contains('clothe') ||
+                                        type.contains('hanger')
+                                    ? 'lib/icons/drying-rack.png'
+                                    : type.contains('parcel')
+                                    ? 'lib/icons/parcel-box.png'
+                                    : 'lib/icons/door-open.png';
 
-                                final statusText = _getStatusText(dev['id'], dev['type']);
-                                final statusColor = _getStatusColor(dev['id'], dev['type']);
+                                final statusText = _getStatusText(
+                                  dev['id'],
+                                  dev['type'],
+                                );
+                                final statusColor = _getStatusColor(
+                                  dev['id'],
+                                  dev['type'],
+                                );
 
                                 return GestureDetector(
-                                  onTap: _isAddingDevice ? null : () => _navigateToDevicePage(dev),
+                                  onTap: _isAddingDevice
+                                      ? null
+                                      : () => _navigateToDevicePage(dev),
                                   child: AbsorbPointer(
                                     absorbing: _isAddingDevice,
                                     child: ViewDevices(
@@ -825,7 +1138,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                       devicePart: statusText,
                                       iconPath: iconPath,
                                       status: statusMap[dev['id']] ?? false,
-                                      onChanged: _isAddingDevice ? null : (value) => powerSwitchChanged(value, dev['id']),
+                                      onChanged: _isAddingDevice
+                                          ? null
+                                          : (value) => powerSwitchChanged(
+                                              value,
+                                              dev['id'],
+                                            ),
                                       statusColor: statusColor,
                                     ),
                                   ),
@@ -845,7 +1163,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
           if (_isAddingDevice)
             Container(
               color: Colors.black54,
-              child: const Center(child: CircularProgressIndicator(color: Colors.blue, backgroundColor: Colors.transparent)),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  color: Colors.blue,
+                  backgroundColor: Colors.transparent,
+                ),
+              ),
             ),
         ],
       ),
