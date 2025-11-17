@@ -543,7 +543,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
       _updateLocalDeviceStatus(deviceId, switchType, value);
 
-      // FIX: Create the complete update data in one step
       final updateData = switchType == 'status'
           ? {'status': value, 'lastUpdated': FieldValue.serverTimestamp()}
           : {
@@ -615,6 +614,117 @@ class _HomePageState extends State<HomePage> with RouteAware {
           status == true || (status is Map ? status['status'] ?? false : false);
       return isOn ? Colors.green : Colors.red;
     }
+  }
+
+  // ===========================================================================
+  // PARCEL BOX WIDGET - Individual cards for inside and outside doors
+  // ===========================================================================
+  Widget _buildParcelBoxCard(
+    Map<String, dynamic> device,
+    dynamic deviceStatus,
+  ) {
+    final insideStatus = deviceStatus is Map
+        ? deviceStatus['insideStatus'] ?? false
+        : false;
+    final outsideStatus = deviceStatus is Map
+        ? deviceStatus['outsideStatus'] ?? false
+        : false;
+
+    return Column(
+      children: [
+        // Inside Door Card
+        Container(
+          margin: EdgeInsets.all(4),
+          child: _buildDoorCard(
+            device: device,
+            isInside: true,
+            isOn: insideStatus,
+            onChanged: (value) =>
+                powerSwitchChanged(value, device['id'], 'insideStatus'),
+          ),
+        ),
+        // Outside Door Card
+        Container(
+          margin: EdgeInsets.all(4),
+          child: _buildDoorCard(
+            device: device,
+            isInside: false,
+            isOn: outsideStatus,
+            onChanged: (value) =>
+                powerSwitchChanged(value, device['id'], 'outsideStatus'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDoorCard({
+    required Map<String, dynamic> device,
+    required bool isInside,
+    required bool isOn,
+    required Function(bool) onChanged,
+  }) {
+    final doorName = isInside ? 'Inside Door' : 'Outside Door';
+    final iconPath = isInside
+        ? 'lib/icons/door-inside.png'
+        : 'lib/icons/door-outside.png';
+    final statusColor = isOn ? Colors.green : Colors.red;
+    final statusText = isOn ? 'On' : 'Off';
+
+    return GestureDetector(
+      onTap: _isAddingDevice ? null : () => _navigateToDevicePage(device),
+      child: AbsorbPointer(
+        absorbing: _isAddingDevice,
+        child: Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withOpacity(0.2)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Door Icon - Use different icons for inside/outside
+              Icon(
+                isInside ? Icons.door_front_door : Icons.door_back_door,
+                size: 35,
+                color: Colors.white,
+              ),
+              SizedBox(height: 6),
+
+              // Door Name
+              Text(
+                doorName,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: 4),
+
+              // Status Text
+              Text(
+                statusText,
+                style: TextStyle(color: statusColor, fontSize: 11),
+              ),
+              SizedBox(height: 6),
+
+              // Switch
+              Switch(
+                value: isOn,
+                onChanged: _isAddingDevice ? null : onChanged,
+                activeColor: Colors.green,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ===========================================================================
@@ -891,7 +1001,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                     .snapshots(),
                                 builder: (context, snapshot) {
                                   if (snapshot.connectionState ==
-                                      ConnectionState.waiting)
+                                      ConnectionState.waiting) {
                                     return Text(
                                       "...",
                                       style: TextStyle(
@@ -899,8 +1009,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                         color: Colors.white70,
                                       ),
                                     );
+                                  }
                                   if (!snapshot.hasData ||
-                                      !snapshot.data!.exists)
+                                      !snapshot.data!.exists) {
                                     return Text(
                                       "No username",
                                       style: TextStyle(
@@ -908,6 +1019,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                         color: Colors.white70,
                                       ),
                                     );
+                                  }
                                   final data =
                                       snapshot.data!.data()
                                           as Map<String, dynamic>?;
@@ -1101,7 +1213,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                               gridDelegate:
                                   SliverGridDelegateWithMaxCrossAxisExtent(
                                     maxCrossAxisExtent: screenWidth * 0.5,
-                                    childAspectRatio: 0.8,
+                                    childAspectRatio: 0.9,
                                     mainAxisSpacing: screenHeight * 0.02,
                                     crossAxisSpacing: screenWidth * 0.03,
                                   ),
@@ -1110,44 +1222,53 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                 final type = (dev['type'] ?? '')
                                     .toString()
                                     .toLowerCase();
-                                final iconPath =
-                                    type.contains('clothe') ||
-                                        type.contains('hanger')
-                                    ? 'lib/icons/drying-rack.png'
-                                    : type.contains('parcel')
-                                    ? 'lib/icons/parcel-box.png'
-                                    : 'lib/icons/door-open.png';
+                                final deviceStatus = statusMap[dev['id']];
 
-                                final statusText = _getStatusText(
-                                  dev['id'],
-                                  dev['type'],
-                                );
-                                final statusColor = _getStatusColor(
-                                  dev['id'],
-                                  dev['type'],
-                                );
+                                if (type.contains('parcel')) {
+                                  // PARCEL BOX - Custom widget with two switches
+                                  return _buildParcelBoxCard(dev, deviceStatus);
+                                } else {
+                                  // SINGLE SWITCH DEVICES - Use existing ViewDevices
+                                  final iconPath =
+                                      type.contains('clothe') ||
+                                          type.contains('hanger')
+                                      ? 'lib/icons/drying-rack.png'
+                                      : 'lib/icons/door-open.png';
 
-                                return GestureDetector(
-                                  onTap: _isAddingDevice
-                                      ? null
-                                      : () => _navigateToDevicePage(dev),
-                                  child: AbsorbPointer(
-                                    absorbing: _isAddingDevice,
-                                    child: ViewDevices(
-                                      deviceType: dev['type'] ?? '',
-                                      devicePart: statusText,
-                                      iconPath: iconPath,
-                                      status: statusMap[dev['id']] ?? false,
-                                      onChanged: _isAddingDevice
-                                          ? null
-                                          : (value) => powerSwitchChanged(
-                                              value,
-                                              dev['id'],
-                                            ),
-                                      statusColor: statusColor,
+                                  final statusText = _getStatusText(
+                                    dev['id'],
+                                    dev['type'],
+                                  );
+                                  final statusColor = _getStatusColor(
+                                    dev['id'],
+                                    dev['type'],
+                                  );
+                                  final displayStatus = deviceStatus is bool
+                                      ? deviceStatus
+                                      : false;
+
+                                  return GestureDetector(
+                                    onTap: _isAddingDevice
+                                        ? null
+                                        : () => _navigateToDevicePage(dev),
+                                    child: AbsorbPointer(
+                                      absorbing: _isAddingDevice,
+                                      child: ViewDevices(
+                                        deviceType: dev['type'] ?? '',
+                                        devicePart: statusText,
+                                        iconPath: iconPath,
+                                        status: displayStatus,
+                                        onChanged: _isAddingDevice
+                                            ? null
+                                            : (value) => powerSwitchChanged(
+                                                value,
+                                                dev['id'],
+                                              ),
+                                        statusColor: statusColor,
+                                      ),
                                     ),
-                                  ),
-                                );
+                                  );
+                                }
                               },
                             );
                           },
