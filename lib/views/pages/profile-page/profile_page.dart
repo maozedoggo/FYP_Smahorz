@@ -295,9 +295,16 @@ class _ProfilePageState extends State<ProfilePage> {
                         ],
                       ),
                       child: _activities.isEmpty
-                          ? const Text(
-                              "No recent activity",
-                              style: TextStyle(color: Colors.white54),
+                          ? Container(
+                              height: 60, // Minimum height to match activity items
+                              alignment: Alignment.centerLeft,
+                              child: const Text(
+                                "No recent activity",
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 16,
+                                ),
+                              ),
                             )
                           : Column(
                               children: _activities
