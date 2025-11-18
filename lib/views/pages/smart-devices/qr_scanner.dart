@@ -15,6 +15,7 @@ class _QRScannerPageState extends State<QRScannerPage>
   late AnimationController _animationController;
   late Animation<double> _animation;
   bool _isFlashOn = false;
+  bool _cameraReady = false;
 
   @override
   void initState() {
@@ -31,10 +32,36 @@ class _QRScannerPageState extends State<QRScannerPage>
   }
 
   @override
+  void reassemble() {
+    super.reassemble();
+    if (controller != null) {
+      controller!.pauseCamera();
+      controller!.resumeCamera();
+    }
+  }
+
+  @override
   void dispose() {
     controller?.dispose();
     _animationController.dispose();
     super.dispose();
+  }
+
+  void _onQRViewCreated(QRViewController controller) {
+    setState(() {
+      this.controller = controller;
+      _cameraReady = true;
+    });
+
+    controller.scannedDataStream.listen((scanData) {
+      controller.pauseCamera();
+      if (mounted) {
+        Navigator.pop(context, scanData.code);
+      }
+    });
+
+    // Initialize camera
+    controller.resumeCamera();
   }
 
   @override
@@ -54,27 +81,21 @@ class _QRScannerPageState extends State<QRScannerPage>
       ),
       body: Stack(
         children: [
-          // QR View
+          // QR View - Use ONLY the default overlay with proper styling
           QRView(
             key: qrKey,
-            onQRViewCreated: (QRViewController c) {
-              controller = c;
-              c.scannedDataStream.listen((scanData) {
-                controller?.pauseCamera();
-                Navigator.pop(context, scanData.code);
-              });
-            },
+            onQRViewCreated: _onQRViewCreated,
             overlay: QrScannerOverlayShape(
-              borderColor: Colors.transparent,
+              borderColor: Colors.lightBlueAccent,
               borderRadius: 12,
-              borderLength: 0,
-              borderWidth: 0,
+              borderLength: 30,
+              borderWidth: 4,
               cutOutSize: MediaQuery.of(context).size.width * 0.7,
+              overlayColor: Colors.black.withOpacity(0.4), // Proper overlay color
             ),
           ),
 
-          // Custom Overlay
-          _buildCustomOverlay(),
+          // REMOVED: _buildCustomOverlay() - This was causing the darkness
 
           // Scanner Animation
           _buildScannerAnimation(),
@@ -84,29 +105,44 @@ class _QRScannerPageState extends State<QRScannerPage>
 
           // Flash Button - Centered at bottom
           _buildFlashButton(),
+
+          // Loading indicator if camera is not ready
+          if (!_cameraReady)
+            Container(
+              color: Colors.black,
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                    SizedBox(height: 20),
+                    Text(
+                      'Initializing Camera...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildCustomOverlay() {
-    return Container(
-      decoration: ShapeDecoration(
-        shape: _ScannerOverlayShape(
-          cutOutSize: MediaQuery.of(context).size.width * 0.7,
-        ),
-      ),
-    );
-  }
-
   Widget _buildScannerAnimation() {
+    final cutOutSize = MediaQuery.of(context).size.width * 0.7;
+    final topPosition = (MediaQuery.of(context).size.height - cutOutSize) / 2;
+    
     return Positioned(
-      top: (MediaQuery.of(context).size.height -
-              MediaQuery.of(context).size.width * 0.7) /
-          2,
+      top: topPosition,
       left: MediaQuery.of(context).size.width * 0.15,
       child: Container(
-        width: MediaQuery.of(context).size.width * 0.7,
+        width: cutOutSize,
         height: 2,
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -116,10 +152,17 @@ class _QRScannerPageState extends State<QRScannerPage>
               Colors.transparent,
             ],
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.lightBlueAccent.withOpacity(0.5),
+              blurRadius: 4,
+              spreadRadius: 2,
+            ),
+          ],
         ),
         transform: Matrix4.translationValues(
           0,
-          _animation.value * MediaQuery.of(context).size.width * 0.55,
+          _animation.value * cutOutSize,
           0,
         ),
       ),
@@ -134,7 +177,7 @@ class _QRScannerPageState extends State<QRScannerPage>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.7),
+          color: Colors.black.withOpacity(0.3),
           borderRadius: BorderRadius.circular(25),
         ),
         child: const Text(
@@ -157,19 +200,25 @@ class _QRScannerPageState extends State<QRScannerPage>
       right: 0,
       child: Align(
         child: GestureDetector(
-          onTap: () {
-            controller?.toggleFlash();
-            setState(() {
-              _isFlashOn = !_isFlashOn;
-            });
+          onTap: () async {
+            try {
+              await controller?.toggleFlash();
+              setState(() {
+                _isFlashOn = !_isFlashOn;
+              });
+            } catch (e) {
+              print('Flash error: $e');
+            }
           },
           child: Container(
             width: 60,
             height: 60,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: _isFlashOn ? Colors.blueAccent : Colors.white.withOpacity(0.1),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withOpacity(0.3)),
+              border: Border.all(
+                color: _isFlashOn ? Colors.blueAccent : Colors.white.withOpacity(0.3),
+              ),
             ),
             child: Icon(
               _isFlashOn ? Icons.flash_off : Icons.flash_on,
@@ -181,123 +230,4 @@ class _QRScannerPageState extends State<QRScannerPage>
       ),
     );
   }
-}
-
-class _ScannerOverlayShape extends ShapeBorder {
-  final double cutOutSize;
-
-  const _ScannerOverlayShape({required this.cutOutSize});
-
-  @override
-  EdgeInsetsGeometry get dimensions => const EdgeInsets.all(0);
-
-  @override
-  Path getInnerPath(Rect rect, {TextDirection? textDirection}) {
-    return Path();
-  }
-
-  @override
-  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
-    return Path()
-      ..addRect(rect)
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: rect.center,
-            width: cutOutSize,
-            height: cutOutSize,
-          ),
-          const Radius.circular(12),
-        ),
-      )
-      ..fillType = PathFillType.evenOdd;
-  }
-
-  @override
-  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
-    // Draw outer darkened overlay
-    final Paint paint = Paint()
-      ..color = Colors.black.withOpacity(0.6)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(getOuterPath(rect), paint);
-
-    // Draw scanner border
-    final Paint borderPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    final borderRect = Rect.fromCenter(
-      center: rect.center,
-      width: cutOutSize,
-      height: cutOutSize,
-    );
-
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(borderRect, const Radius.circular(12)),
-      borderPaint,
-    );
-
-    // Draw corner indicators
-    final cornerPaint = Paint()
-      ..color = Colors.lightBlueAccent
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.square;
-
-    final cornerLength = 20.0;
-    final borderRect2 = borderRect.deflate(1);
-
-    // Top left corner
-    canvas.drawLine(
-      borderRect2.topLeft,
-      borderRect2.topLeft + Offset(cornerLength, 0),
-      cornerPaint,
-    );
-    canvas.drawLine(
-      borderRect2.topLeft,
-      borderRect2.topLeft + Offset(0, cornerLength),
-      cornerPaint,
-    );
-
-    // Top right corner
-    canvas.drawLine(
-      borderRect2.topRight,
-      borderRect2.topRight - Offset(cornerLength, 0),
-      cornerPaint,
-    );
-    canvas.drawLine(
-      borderRect2.topRight,
-      borderRect2.topRight + Offset(0, cornerLength),
-      cornerPaint,
-    );
-
-    // Bottom left corner
-    canvas.drawLine(
-      borderRect2.bottomLeft,
-      borderRect2.bottomLeft + Offset(cornerLength, 0),
-      cornerPaint,
-    );
-    canvas.drawLine(
-      borderRect2.bottomLeft,
-      borderRect2.bottomLeft - Offset(0, cornerLength),
-      cornerPaint,
-    );
-
-    // Bottom right corner
-    canvas.drawLine(
-      borderRect2.bottomRight,
-      borderRect2.bottomRight - Offset(cornerLength, 0),
-      cornerPaint,
-    );
-    canvas.drawLine(
-      borderRect2.bottomRight,
-      borderRect2.bottomRight - Offset(0, cornerLength),
-      cornerPaint,
-    );
-  }
-
-  @override
-  ShapeBorder scale(double t) => this;
 }
