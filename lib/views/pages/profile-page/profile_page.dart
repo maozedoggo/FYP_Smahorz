@@ -18,11 +18,28 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _photoUrl;
   String? _name;
   bool _loading = true;
+  List<Map<String, dynamic>> _activities = [];
 
   @override
   void initState() {
     super.initState();
     _loadUserProfile();
+  }
+
+  // Helper function to format timestamp
+  String _formatTimestamp(Timestamp timestamp) {
+    final date = timestamp.toDate();
+
+    // Format date as dd/mm/yy
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year.toString().substring(2);
+
+    // Format time as 15:40 (24-hour format)
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+
+    return '$day/$month/$year $hour:$minute';
   }
 
   Future<void> _loadUserProfile() async {
@@ -31,17 +48,43 @@ class _ProfilePageState extends State<ProfilePage> {
 
     final email = user.email!;
     try {
-      DocumentSnapshot doc =
-          await FirebaseFirestore.instance.collection('users').doc(email).get();
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(email)
+          .get();
 
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
+        // load activity log for this user (if household exists)
+        final householdId = data['householdId'] as String?;
+        if (householdId != null && householdId.isNotEmpty) {
+          final snap = await FirebaseFirestore.instance
+              .collection('households')
+              .doc(householdId)
+              .collection('members')
+              .doc(email)
+              .collection('activityLog')
+              .orderBy('timestamp', descending: true)
+              .limit(20)
+              .get();
+          _activities = snap.docs.map((d) {
+            final m = d.data();
+            final timestamp = m['timestamp'] as Timestamp?;
+            return {
+              'time': timestamp != null ? _formatTimestamp(timestamp) : '',
+              'action': m['action'] ?? '',
+            };
+          }).toList();
+        } else {
+          _activities = [];
+        }
         setState(() {
           _photoUrl = data['photoUrl'];
           _name = data['name'] ?? "No Name";
           _loading = false;
         });
       } else {
+        _activities = [];
         await FirebaseFirestore.instance.collection('users').doc(email).set({
           "email": email,
           "name": "",
@@ -56,9 +99,9 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       debugPrint("Error loading profile: $e");
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error loading profile: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error loading profile: $e")));
     }
   }
 
@@ -74,8 +117,9 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final uid = user.uid;
 
-      final ref =
-          FirebaseStorage.instance.ref().child('profilePictures/$uid/profile.jpg');
+      final ref = FirebaseStorage.instance.ref().child(
+        'profilePictures/$uid/profile.jpg',
+      );
 
       await ref.putFile(file);
 
@@ -90,14 +134,14 @@ class _ProfilePageState extends State<ProfilePage> {
         _photoUrl = downloadUrl;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Profile picture updated!")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Profile picture updated!")));
     } catch (e) {
       debugPrint("Error uploading image: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error uploading image: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error uploading image: $e")));
     }
   }
 
@@ -235,7 +279,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                     const SizedBox(height: 16),
 
-                    // Activity Card (dark style)
+                    // Activity Card (loaded from Firestore)
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -250,26 +294,21 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ],
                       ),
-                      child: const Column(
-                        children: [
-                          ActivityItem(
-                            time: "7:45 PM",
-                            action: "Turned on room lights",
-                          ),
-                          ActivityItem(
-                            time: "8:30 PM",
-                            action: "Opened parcel box",
-                          ),
-                          ActivityItem(
-                            time: "8:45 PM",
-                            action: "Retracted clothes hanger",
-                          ),
-                          ActivityItem(
-                            time: "9:00 PM",
-                            action: "Turned off room lights",
-                          ),
-                        ],
-                      ),
+                      child: _activities.isEmpty
+                          ? const Text(
+                              "No recent activity",
+                              style: TextStyle(color: Colors.white54),
+                            )
+                          : Column(
+                              children: _activities
+                                  .map(
+                                    (a) => ActivityItem(
+                                      time: a['time'] ?? '',
+                                      action: a['action'] ?? '',
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
                     ),
                   ],
                 ),
@@ -293,22 +332,20 @@ class ActivityItem extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 70,
+            width: 120, // Increased width to accommodate the longer timestamp
             child: Text(
               time,
               style: const TextStyle(
                 fontWeight: FontWeight.w500,
                 color: Colors.white54,
+                fontSize: 14,
               ),
             ),
           ),
           Expanded(
             child: Text(
               action,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 16),
             ),
           ),
         ],

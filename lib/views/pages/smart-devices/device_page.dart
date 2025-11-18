@@ -35,7 +35,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     databaseURL:
         "https://smahorz-fyp-default-rtdb.asia-southeast1.firebasedatabase.app",
   ).ref();
-  
+
   StreamSubscription<DatabaseEvent>? _deviceSubscription;
   StreamSubscription<DatabaseEvent>? _parcelInsideSubscription;
   StreamSubscription<DatabaseEvent>? _parcelOutsideSubscription;
@@ -78,10 +78,9 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       print(" - $insidePath");
       print(" - $outsidePath");
 
-      _parcelInsideSubscription = _realtimeDB
-          .child(insidePath)
-          .onValue
-          .listen((DatabaseEvent event) {
+      _parcelInsideSubscription = _realtimeDB.child(insidePath).onValue.listen((
+        DatabaseEvent event,
+      ) {
         if (event.snapshot.exists && mounted && !_isControlling) {
           final insideStatus = event.snapshot.value == true;
           _updateParcelStatus(insideStatus, true);
@@ -92,11 +91,11 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
           .child(outsidePath)
           .onValue
           .listen((DatabaseEvent event) {
-        if (event.snapshot.exists && mounted && !_isControlling) {
-          final outsideStatus = event.snapshot.value == true;
-          _updateParcelStatus(outsideStatus, false);
-        }
-      });
+            if (event.snapshot.exists && mounted && !_isControlling) {
+              final outsideStatus = event.snapshot.value == true;
+              _updateParcelStatus(outsideStatus, false);
+            }
+          });
     } else {
       // All other devices - simple status
       final path = '$householdId/${widget.deviceId}/status';
@@ -105,40 +104,42 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       _deviceSubscription = _realtimeDB
           .child(path)
           .onValue
-          .listen((DatabaseEvent event) {
-        if (event.snapshot.exists && mounted && !_isControlling) {
-          final data = event.snapshot.value;
-          final bool isOn = data == true;
-          
-          setState(() {
-            _deviceStatus = isOn;
-          });
-          
-          print("DeviceControlPage update: ${widget.deviceId} = $isOn");
-        }
-      }, onError: (error) {
-        print("DeviceControlPage listener error: $error");
-      });
+          .listen(
+            (DatabaseEvent event) {
+              if (event.snapshot.exists && mounted && !_isControlling) {
+                final data = event.snapshot.value;
+                final bool isOn = data == true;
+
+                setState(() {
+                  _deviceStatus = isOn;
+                });
+
+                print("DeviceControlPage update: ${widget.deviceId} = $isOn");
+              }
+            },
+            onError: (error) {
+              print("DeviceControlPage listener error: $error");
+            },
+          );
     }
   }
 
   void _updateParcelStatus(bool status, bool isInside) {
     setState(() {
       if (_deviceStatus is! Map) {
-        _deviceStatus = {
-          'insideStatus': false,
-          'outsideStatus': false,
-        };
+        _deviceStatus = {'insideStatus': false, 'outsideStatus': false};
       }
-      
+
       if (isInside) {
         _deviceStatus['insideStatus'] = status;
       } else {
         _deviceStatus['outsideStatus'] = status;
       }
     });
-    
-    print("DeviceControlPage parcel update: inside=${_deviceStatus['insideStatus']}, outside=${_deviceStatus['outsideStatus']}");
+
+    print(
+      "DeviceControlPage parcel update: inside=${_deviceStatus['insideStatus']}, outside=${_deviceStatus['outsideStatus']}",
+    );
   }
 
   // ===========================================================================
@@ -151,7 +152,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
     try {
       _isControlling = true; // Prevent multiple rapid toggles
-      
+
       final deviceType = widget.deviceType.toLowerCase();
       final newStatus = _getNewStatus();
 
@@ -176,7 +177,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       });
 
       print("✓ DeviceControlPage successfully updated device");
-
     } catch (error) {
       print("✗ Error controlling device: $error");
       // Don't revert UI - keep previous state
@@ -190,40 +190,103 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
   dynamic _getNewStatus() {
     final deviceType = widget.deviceType.toLowerCase();
-    
+
     if (deviceType.contains('parcel')) {
       // For parcel box, toggle both doors together in control page
-      final currentInside = _deviceStatus is Map ? _deviceStatus['insideStatus'] ?? false : false;
-      final currentOutside = _deviceStatus is Map ? _deviceStatus['outsideStatus'] ?? false : false;
-      
+      final currentInside = _deviceStatus is Map
+          ? _deviceStatus['insideStatus'] ?? false
+          : false;
+      final currentOutside = _deviceStatus is Map
+          ? _deviceStatus['outsideStatus'] ?? false
+          : false;
+
       // Toggle both doors to the same state
       final newState = !(currentInside || currentOutside);
-      return {
-        'insideStatus': newState,
-        'outsideStatus': newState,
-      };
+      return {'insideStatus': newState, 'outsideStatus': newState};
     } else {
       // Simple toggle for other devices
       return !(_deviceStatus == true);
     }
   }
 
+  // ---------- Activity logging helper ----------
+  Future<void> _logActivity({
+    required String householdId,
+    required String userEmail,
+    required String deviceId,
+    required String deviceName,
+    required String action,
+  }) async {
+    try {
+      // Ensure member document exists with username and role
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userEmail)
+          .get();
+      final username = userDoc.data()?['username'] ?? userEmail;
+      final role = userDoc.data()?['role'] ?? 'member';
+      final memberRef = FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(userEmail);
+      await memberRef.set({
+        'username': username,
+        'role': role,
+      }, SetOptions(merge: true));
+
+      await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(userEmail)
+          .collection('activityLog')
+          .add({
+            'userEmail': userEmail,
+            'deviceId': deviceId,
+            'deviceName': deviceName,
+            'action': action,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+    } catch (e) {
+      debugPrint("DeviceControlPage: Error logging activity: $e");
+    }
+  }
+
   Future<void> _updateSimpleDeviceStatus(bool newStatus) async {
     // Update Firestore
-    await _firestore
-        .collection('devices')
-        .doc(widget.deviceId)
-        .update({
-          'status': newStatus,
-          'lastUpdated': FieldValue.serverTimestamp(),
-        });
+    await _firestore.collection('devices').doc(widget.deviceId).update({
+      'status': newStatus,
+      'lastUpdated': FieldValue.serverTimestamp(),
+    });
     print("✓ Updated Firestore: status = $newStatus");
 
     // Update Realtime Database
     await _realtimeDB
         .child('$householdUid/${widget.deviceId}/status')
         .set(newStatus);
-    print("✓ Updated Realtime DB: $householdUid/${widget.deviceId}/status = $newStatus");
+    print(
+      "✓ Updated Realtime DB: $householdUid/${widget.deviceId}/status = $newStatus",
+    );
+
+    // Log activity
+    final user = FirebaseAuth.instance.currentUser;
+    final deviceName = widget.deviceName;
+    if (user != null && householdUid != null) {
+      final action =
+          (widget.deviceType.toLowerCase().contains('hanger') ||
+              widget.deviceType.toLowerCase().contains('clothe'))
+          ? (newStatus ? 'Extended clothes hanger' : 'Retracted clothes hanger')
+          : (newStatus ? 'Turned ON $deviceName' : 'Turned OFF $deviceName');
+
+      await _logActivity(
+        householdId: householdUid!,
+        userEmail: user.email ?? user.uid,
+        deviceId: widget.deviceId,
+        deviceName: deviceName,
+        action: action,
+      );
+    }
   }
 
   Future<void> _updateParcelBoxStatus(Map<String, bool> newStatus) async {
@@ -231,16 +294,10 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     final outsideStatus = newStatus['outsideStatus'] ?? false;
 
     // Update Firestore
-    await _firestore
-        .collection('devices')
-        .doc(widget.deviceId)
-        .update({
-          'status': {
-            'insideStatus': insideStatus,
-            'outsideStatus': outsideStatus,
-          },
-          'lastUpdated': FieldValue.serverTimestamp(),
-        });
+    await _firestore.collection('devices').doc(widget.deviceId).update({
+      'status': {'insideStatus': insideStatus, 'outsideStatus': outsideStatus},
+      'lastUpdated': FieldValue.serverTimestamp(),
+    });
     print("✓ Updated Firestore parcel box status");
 
     // Update Realtime Database - set both values
@@ -250,7 +307,25 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     await _realtimeDB
         .child('$householdUid/${widget.deviceId}/outsideStatus')
         .set(outsideStatus);
-    print("✓ Updated Realtime DB parcel box: inside=$insideStatus, outside=$outsideStatus");
+    print(
+      "✓ Updated Realtime DB parcel box: inside=$insideStatus, outside=$outsideStatus",
+    );
+
+    // Log activity
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && householdUid != null) {
+      final action = (insideStatus || outsideStatus)
+          ? 'Opened parcel box (inside:${insideStatus ? 'Open' : 'Closed'} / outside:${outsideStatus ? 'Open' : 'Closed'})'
+          : 'Closed parcel box';
+
+      await _logActivity(
+        householdId: householdUid!,
+        userEmail: user.email ?? user.uid,
+        deviceId: widget.deviceId,
+        deviceName: widget.deviceName,
+        action: action,
+      );
+    }
   }
 
   // ===========================================================================
@@ -259,10 +334,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   Future<void> _loadHouseholdUid() async {
     try {
       final userEmail = FirebaseAuth.instance.currentUser!.email!;
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(userEmail)
-          .get();
+      final userDoc = await _firestore.collection('users').doc(userEmail).get();
 
       if (userDoc.exists && userDoc.data()!.containsKey('householdId')) {
         final householdId = userDoc['householdId'];
@@ -271,7 +343,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
         });
         _setupRealtimeListener(householdId);
         print("DeviceControlPage loaded household: $householdId");
-        
+
         // Also load initial device status
         _loadInitialDeviceStatus();
       } else {
@@ -292,23 +364,22 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
           .collection('devices')
           .doc(widget.deviceId)
           .get();
-      
+
       if (deviceDoc.exists && mounted) {
         final data = deviceDoc.data()!;
         final status = data['status'];
         final deviceType = widget.deviceType.toLowerCase();
-        
+
         setState(() {
           if (deviceType.contains('parcel')) {
-            _deviceStatus = status is Map ? Map<String, bool>.from(status) : {
-              'insideStatus': false,
-              'outsideStatus': false,
-            };
+            _deviceStatus = status is Map
+                ? Map<String, bool>.from(status)
+                : {'insideStatus': false, 'outsideStatus': false};
           } else {
             _deviceStatus = status == true;
           }
         });
-        
+
         print("Loaded initial device status: $_deviceStatus");
       }
     } catch (e) {
@@ -321,12 +392,16 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   // ===========================================================================
   String _getStatusText() {
     final deviceType = widget.deviceType.toLowerCase();
-    
+
     if (deviceType.contains('hanger') || deviceType.contains('clothe')) {
       return _deviceStatus == true ? "Extended" : "Retracted";
     } else if (deviceType.contains('parcel')) {
-      final inside = _deviceStatus is Map ? _deviceStatus['insideStatus'] ?? false : false;
-      final outside = _deviceStatus is Map ? _deviceStatus['outsideStatus'] ?? false : false;
+      final inside = _deviceStatus is Map
+          ? _deviceStatus['insideStatus'] ?? false
+          : false;
+      final outside = _deviceStatus is Map
+          ? _deviceStatus['outsideStatus'] ?? false
+          : false;
       return 'In: ${inside ? "Open" : "Closed"}, Out: ${outside ? "Open" : "Closed"}';
     }
     return _deviceStatus == true ? "On" : "Off";
@@ -334,10 +409,14 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
   Color _getStatusColor() {
     final deviceType = widget.deviceType.toLowerCase();
-    
+
     if (deviceType.contains('parcel')) {
-      final inside = _deviceStatus is Map ? _deviceStatus['insideStatus'] ?? false : false;
-      final outside = _deviceStatus is Map ? _deviceStatus['outsideStatus'] ?? false : false;
+      final inside = _deviceStatus is Map
+          ? _deviceStatus['insideStatus'] ?? false
+          : false;
+      final outside = _deviceStatus is Map
+          ? _deviceStatus['outsideStatus'] ?? false
+          : false;
       return (inside || outside) ? Colors.green : Colors.red;
     }
     return _deviceStatus == true ? Colors.green : Colors.red;
@@ -345,12 +424,16 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
   String _getButtonText() {
     final deviceType = widget.deviceType.toLowerCase();
-    
+
     if (deviceType.contains('hanger') || deviceType.contains('clothe')) {
       return _deviceStatus == true ? "RETRACT" : "EXTEND";
     } else if (deviceType.contains('parcel')) {
-      final inside = _deviceStatus is Map ? _deviceStatus['insideStatus'] ?? false : false;
-      final outside = _deviceStatus is Map ? _deviceStatus['outsideStatus'] ?? false : false;
+      final inside = _deviceStatus is Map
+          ? _deviceStatus['insideStatus'] ?? false
+          : false;
+      final outside = _deviceStatus is Map
+          ? _deviceStatus['outsideStatus'] ?? false
+          : false;
       return (inside || outside) ? "CLOSE ALL" : "OPEN ALL";
     }
     return _deviceStatus == true ? "TURN OFF" : "TURN ON";
@@ -358,10 +441,14 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
   Color _getButtonColor() {
     final deviceType = widget.deviceType.toLowerCase();
-    
+
     if (deviceType.contains('parcel')) {
-      final inside = _deviceStatus is Map ? _deviceStatus['insideStatus'] ?? false : false;
-      final outside = _deviceStatus is Map ? _deviceStatus['outsideStatus'] ?? false : false;
+      final inside = _deviceStatus is Map
+          ? _deviceStatus['insideStatus'] ?? false
+          : false;
+      final outside = _deviceStatus is Map
+          ? _deviceStatus['outsideStatus'] ?? false
+          : false;
       return (inside || outside) ? Colors.red : Colors.green;
     }
     return _deviceStatus == true ? Colors.red : Colors.green;
@@ -403,9 +490,10 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
               Text(
                 widget.deviceName,
                 style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold),
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -415,7 +503,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                 "Type: ${widget.deviceType}",
                 style: const TextStyle(color: Colors.white70, fontSize: 16),
               ),
-              
+
               // Current status
               Text(
                 "Status: ${_getStatusText()}",
@@ -445,12 +533,17 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
                           ),
                         )
                       : Text(
                           _getButtonText(),
-                          style: const TextStyle(color: Colors.white, fontSize: 20),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                          ),
                         ),
                 ),
               ),
@@ -474,7 +567,9 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                         );
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: householdUid == null ? Colors.grey : Colors.white,
+                  backgroundColor: householdUid == null
+                      ? Colors.grey
+                      : Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -482,7 +577,10 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                 icon: const Icon(Icons.calendar_month, color: Colors.black),
                 label: const Text(
                   "Add Schedule",
-                  style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],

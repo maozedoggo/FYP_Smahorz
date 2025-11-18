@@ -542,7 +542,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
     String deviceId, [
     String switchType = 'status',
   ]) async {
+    print("=== SWITCH TOGGLED ===");
+    print("Device ID: $deviceId");
+    print("New Status: $value");
+
     try {
+      // Get current user's household ID
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
@@ -550,46 +555,145 @@ class _HomePageState extends State<HomePage> with RouteAware {
           .collection('users')
           .doc(user.email)
           .get();
-      final householdId = userDoc.data()?['householdId'];
-      if (householdId == null || householdId.toString().isEmpty) return;
 
-      // === ADD THIS ===
-      // Get device type
-      final device = _devices.firstWhere(
-        (d) => d['id'] == deviceId,
-        orElse: () => {'type': ''},
-      );
-      final deviceType = device['type']?.toString().toLowerCase() ?? '';
-      // === END ADD ===
+      final householdId = userDoc.data()?['householdId'];
+      if (householdId == null || householdId.toString().isEmpty) {
+        print("✗ No household ID found for user");
+        return;
+      }
+
+      print("Household ID: $householdId");
+
+      // Update local state for immediate UI response
+      _deviceStatus.value = {..._deviceStatus.value, deviceId: value};
+
+      // Update Firestore for data persistence
+      // For parcel devices, we update nested fields; for others use boolean
+      final deviceDoc = await _firestore
+          .collection('devices')
+          .doc(deviceId)
+          .get();
+      final deviceType =
+          deviceDoc.data()?['type']?.toString().toLowerCase() ?? '';
+      final deviceName = deviceDoc.data()?['name'] ?? deviceId;
 
       if (deviceType.contains('parcel')) {
-        // Parcel box - individual door control
-        _updateLocalDeviceStatus(deviceId, switchType, value);
-
+        // update relevant field inside map
         final updateData = switchType == 'status'
             ? {'status': value, 'lastUpdated': FieldValue.serverTimestamp()}
             : {
-                'status.$switchType': value,
+                'status.${switchType}': value,
                 'lastUpdated': FieldValue.serverTimestamp(),
               };
-
         await _firestore.collection('devices').doc(deviceId).update(updateData);
+
+        // Realtime DB path for parcel subfield
         final path = switchType == 'status' ? 'status' : switchType;
         await _realtimeDB.child('$householdId/$deviceId/$path').set(value);
-      } else {
-        // All other devices (including clothes hanger) - simple boolean
-        _updateLocalDeviceStatus(deviceId, switchType, value);
 
+        // Build action string
+        final action =
+            (switchType == 'insideStatus' || switchType == 'outsideStatus')
+            ? "${switchType == 'insideStatus' ? 'Toggled inside door' : 'Toggled outside door'} -> ${value ? 'On' : 'Off'}"
+            : "Toggled $deviceName -> ${value ? 'On' : 'Off'}";
+
+        // Log activity
+        await _logActivity(
+          householdId: householdId,
+          userEmail: user.email!,
+          deviceId: deviceId,
+          deviceName: deviceName,
+          action: action,
+        );
+      } else {
+        // Normal device: status is bool
         await _firestore.collection('devices').doc(deviceId).update({
           'status': value,
           'lastUpdated': FieldValue.serverTimestamp(),
         });
-
         await _realtimeDB.child('$householdId/$deviceId/status').set(value);
+
+        // Build action string - special-case hangers for more readable text
+        String action;
+        if (deviceType.contains('hanger') || deviceType.contains('clothe')) {
+          action = value
+              ? 'Extended clothes hanger'
+              : 'Retracted clothes hanger';
+        } else {
+          action = value
+              ? 'Turned ON ${deviceName}'
+              : 'Turned OFF ${deviceName}';
+        }
+
+        // Log activity
+        await _logActivity(
+          householdId: householdId,
+          userEmail: user.email!,
+          deviceId: deviceId,
+          deviceName: deviceName,
+          action: action,
+        );
+      }
+
+      // Verify the write
+      final snapshot = await _realtimeDB
+          .child(
+            '$householdId/$deviceId/${switchType == 'status' ? 'status' : switchType}',
+          )
+          .get();
+      if (snapshot.exists) {
+        print(
+          "✓ Verification - Current value in Realtime DB: ${snapshot.value}",
+        );
+      } else {
+        print("✗ Verification failed - No data at path");
       }
     } catch (e) {
-      print("Error controlling device: $e");
-      _updateLocalDeviceStatus(deviceId, switchType, !value);
+      print("✗ Error controlling device: $e");
+      // Revert local state on error
+      _deviceStatus.value = {..._deviceStatus.value, deviceId: !value};
+    }
+  }
+
+  // ---------- Activity logging helper ----------
+  Future<void> _logActivity({
+    required String householdId,
+    required String userEmail,
+    required String deviceId,
+    required String deviceName,
+    required String action,
+  }) async {
+    try {
+      // Ensure member document exists and contains minimal info (username, role)
+      final userDoc = await _firestore.collection('users').doc(userEmail).get();
+      final username = userDoc.data()?['username'] ?? userEmail;
+      final role = userDoc.data()?['role'] ?? 'member';
+      final memberRef = _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(userEmail);
+
+      await memberRef.set({
+        'username': username,
+        'role': role,
+      }, SetOptions(merge: true));
+
+      await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(userEmail)
+          .collection('activityLog')
+          .add({
+            'userEmail': userEmail,
+            'deviceId': deviceId,
+            'deviceName': deviceName,
+            'action': action,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+    } catch (e) {
+      debugPrint("Error logging activity: $e");
     }
   }
 
