@@ -749,7 +749,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
         : false;
     final doorName = isInside ? 'Inside Door' : 'Outside Door';
     final statusColor = doorStatus ? Colors.green : Colors.red;
-    final statusText = doorStatus ? 'On' : 'Off';
+    final statusText = doorStatus ? 'Lock' : 'Unlock';
 
     return GestureDetector(
       onTap: _isAddingDevice ? null : () => _navigateToDevicePage(device),
