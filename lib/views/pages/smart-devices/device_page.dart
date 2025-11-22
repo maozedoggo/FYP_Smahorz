@@ -407,21 +407,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     return _deviceStatus == true ? "On" : "Off";
   }
 
-  Color _getStatusColor() {
-    final deviceType = widget.deviceType.toLowerCase();
-
-    if (deviceType.contains('parcel')) {
-      final inside = _deviceStatus is Map
-          ? _deviceStatus['insideStatus'] ?? false
-          : false;
-      final outside = _deviceStatus is Map
-          ? _deviceStatus['outsideStatus'] ?? false
-          : false;
-      return (inside || outside) ? Colors.green : Colors.red;
-    }
-    return _deviceStatus == true ? Colors.green : Colors.red;
-  }
-
   String _getButtonText() {
     final deviceType = widget.deviceType.toLowerCase();
 
@@ -449,34 +434,39 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       final outside = _deviceStatus is Map
           ? _deviceStatus['outsideStatus'] ?? false
           : false;
-      return (inside || outside) ? Colors.red : Colors.green;
+      return (inside || outside) ? Colors.redAccent : Colors.green;
     }
-    return _deviceStatus == true ? Colors.red : Colors.green;
+    return _deviceStatus == true ? Colors.redAccent : Colors.green;
+  }
+
+  String _getDeviceIcon() {
+    final deviceType = widget.deviceType.toLowerCase();
+    String deviceIcon;
+
+    if (deviceType.contains("hanger") || deviceType.contains("clothes")) {
+      deviceIcon = "lib/icons/drying-rack.png";
+      return deviceIcon;
+    } else {
+      deviceIcon = "lib/icons/parcel-box.png";
+    }
+
+    return deviceIcon;
   }
 
   // ===========================================================================
-  // BUILD METHOD
+  // BUILD METHOD - UPDATED UI
   // ===========================================================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0063A1), Color(0xFF0982BA), Color(0xFF04111C)],
-            stops: [0.21, 0.41, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Back button
-              Align(
+      backgroundColor: const Color(0xFF0B1220),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Back button
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5.0),
+              child: Align(
                 alignment: Alignment.topLeft,
                 child: IconButton(
                   icon: const Icon(Icons.arrow_back_ios_new),
@@ -484,74 +474,139 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                   onPressed: () => Navigator.pop(context),
                 ),
               ),
-              const SizedBox(height: 10),
+            ),
 
-              // Device name
-              Text(
+            const SizedBox(height: 20),
+
+            // Device name
+            Align(
+              child: Text(
                 widget.deviceName,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 20),
+            ),
 
-              // Device type
-              Text(
-                "Type: ${widget.deviceType}",
-                style: const TextStyle(color: Colors.white70, fontSize: 16),
-              ),
+            const SizedBox(height: 10),
 
-              // Current status
-              Text(
-                "Status: ${_getStatusText()}",
-                style: TextStyle(
-                  color: _getStatusColor(),
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+            // Device type
+            Text(
+              "Type: ${widget.deviceType}",
+              style: const TextStyle(color: Colors.white70, fontSize: 16),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Status Card
+            SizedBox(
+              width: double.infinity,
+              child: Card(
+                color: const Color(0xFF1C2233),
+                margin: const EdgeInsets.symmetric(horizontal: 20),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Image.asset(
+                        _getDeviceIcon(),
+                        width: 80,
+                        color: Colors.blueAccent,
+                      ),
+                      const SizedBox(height: 15),
+                      Text(
+                        "Current Status",
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        _getStatusText(),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 40),
+            ),
 
-              // Control button
-              SizedBox(
-                width: 200,
-                height: 60,
-                child: ElevatedButton(
-                  onPressed: _isControlling ? null : _toggleDevice,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _getButtonColor(),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+            const SizedBox(height: 20),
+
+            // Main Control Button - Centered
+            SizedBox(
+              width: 200,
+              height: 60,
+              child: ElevatedButton(
+                onPressed: _isControlling ? null : _toggleDevice,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _getButtonColor(),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
                   ),
-                  child: _isControlling
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          ),
-                        )
-                      : Text(
-                          _getButtonText(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
+                  elevation: 4,
+                  shadowColor: _getButtonColor().withOpacity(0.5),
+                ),
+                child: _isControlling
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
                           ),
                         ),
-                ),
+                      )
+                    : Text(
+                        _getButtonText(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
-              const SizedBox(height: 40),
+            ),
 
-              // Navigate to Schedule Page
-              ElevatedButton.icon(
-                onPressed: householdUid == null || _isControlling
+            const SizedBox(height: 20),
+
+            // Schedule Button - Centered with icon
+            Card(
+              color: const Color(0xFF1C2233),
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: ListTile(
+                leading: const Icon(
+                  Icons.calendar_month,
+                  color: Colors.blueAccent,
+                ),
+                title: const Text(
+                  "Schedules",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text(
+                  "Manage automated schedules",
+                  style: TextStyle(color: Colors.white70),
+                ),
+                trailing: const Icon(
+                  Icons.arrow_forward_ios,
+                  color: Colors.blueAccent,
+                  size: 16,
+                ),
+                onTap: householdUid == null || _isControlling
                     ? null
                     : () {
                         Navigator.push(
@@ -566,25 +621,38 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                           ),
                         );
                       },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: householdUid == null
-                      ? Colors.grey
-                      : Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                icon: const Icon(Icons.calendar_month, color: Colors.black),
-                label: const Text(
-                  "Add Schedule",
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
               ),
-            ],
-          ),
+            ),
+
+            const Spacer(),
+
+            // Connection Status
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    householdUid != null ? Icons.wifi : Icons.wifi_off,
+                    color: householdUid != null
+                        ? Colors.green
+                        : Colors.redAccent,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    householdUid != null ? "Connected" : "Disconnected",
+                    style: TextStyle(
+                      color: householdUid != null
+                          ? Colors.green
+                          : Colors.redAccent,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
