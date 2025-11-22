@@ -56,6 +56,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
   bool _isAddingDevice = false;
   Map<String, StreamSubscription<DocumentSnapshot>> _deviceSubscriptions = {};
 
+  // STORE LOCALLY
+  bool _isControllingDevice = false;
+  String? _currentlyControllingDeviceId;
+  String? _currentlyControllingSwitchType;
+
   // ===========================================================================
   // LIFECYCLE METHODS
   // ===========================================================================
@@ -130,6 +135,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
           .snapshots()
           .listen(
             (documentSnapshot) {
+              // Skip updates if we're currently controlling this device
+              if (_isControllingDevice &&
+                  _currentlyControllingDeviceId == deviceId) {
+                return;
+              }
+
               if (documentSnapshot.exists && mounted) {
                 final data = documentSnapshot.data();
                 if (data != null && data.containsKey('status')) {
@@ -200,6 +211,13 @@ class _HomePageState extends State<HomePage> with RouteAware {
         final outsidePath = '$householdId/$deviceId/outsideStatus';
 
         _realtimeDB.child(insidePath).onValue.listen((DatabaseEvent event) {
+          // Skip updates if we're currently controlling this specific switch
+          if (_isControllingDevice &&
+              _currentlyControllingDeviceId == deviceId &&
+              _currentlyControllingSwitchType == 'insideStatus') {
+            return;
+          }
+
           if (event.snapshot.exists && mounted) {
             final insideStatus = event.snapshot.value == true;
             final currentStatus = _deviceStatus.value[deviceId] ?? {};
@@ -211,6 +229,13 @@ class _HomePageState extends State<HomePage> with RouteAware {
         });
 
         _realtimeDB.child(outsidePath).onValue.listen((DatabaseEvent event) {
+          // Skip updates if we're currently controlling this specific switch
+          if (_isControllingDevice &&
+              _currentlyControllingDeviceId == deviceId &&
+              _currentlyControllingSwitchType == 'outsideStatus') {
+            return;
+          }
+
           if (event.snapshot.exists && mounted) {
             final outsideStatus = event.snapshot.value == true;
             final currentStatus = _deviceStatus.value[deviceId] ?? {};
@@ -224,6 +249,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
         // All other devices use simple boolean status
         final path = '$householdId/$deviceId/status';
         _realtimeDB.child(path).onValue.listen((DatabaseEvent event) {
+          // Skip updates if we're currently controlling this device
+          if (_isControllingDevice &&
+              _currentlyControllingDeviceId == deviceId) {
+            return;
+          }
+
           if (event.snapshot.exists && mounted) {
             final bool isOn = event.snapshot.value == true;
             _deviceStatus.value = {..._deviceStatus.value, deviceId: isOn};
@@ -542,11 +573,19 @@ class _HomePageState extends State<HomePage> with RouteAware {
     String deviceId, [
     String switchType = 'status',
   ]) async {
+    // Prevent multiple rapid toggles
+    if (_isControllingDevice) return;
+
     print("=== SWITCH TOGGLED ===");
     print("Device ID: $deviceId");
+    print("Switch Type: $switchType");
     print("New Status: $value");
 
     try {
+      _isControllingDevice = true;
+      _currentlyControllingDeviceId = deviceId;
+      _currentlyControllingSwitchType = switchType;
+
       // Get current user's household ID
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
@@ -565,10 +604,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
       print("Household ID: $householdId");
 
       // Update local state for immediate UI response
-      _deviceStatus.value = {..._deviceStatus.value, deviceId: value};
+      _updateLocalDeviceStatus(deviceId, switchType, value);
 
       // Update Firestore for data persistence
-      // For parcel devices, we update nested fields; for others use boolean
       final deviceDoc = await _firestore
           .collection('devices')
           .doc(deviceId)
@@ -651,7 +689,16 @@ class _HomePageState extends State<HomePage> with RouteAware {
     } catch (e) {
       print("✗ Error controlling device: $e");
       // Revert local state on error
-      _deviceStatus.value = {..._deviceStatus.value, deviceId: !value};
+      _updateLocalDeviceStatus(deviceId, switchType, !value);
+    } finally {
+      // Add a small delay before re-enabling controls to allow listeners to settle
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _isControllingDevice = false;
+          _currentlyControllingDeviceId = null;
+          _currentlyControllingSwitchType = null;
+        }
+      });
     }
   }
 
