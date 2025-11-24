@@ -39,7 +39,10 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   StreamSubscription<DatabaseEvent>? _deviceSubscription;
   StreamSubscription<DatabaseEvent>? _parcelInsideSubscription;
   StreamSubscription<DatabaseEvent>? _parcelOutsideSubscription;
-  bool _isControlling = false; // Add this to prevent multiple rapid toggles
+  StreamSubscription<DatabaseEvent>? _connectionStatusSubscription;
+  
+  bool _isControlling = false;
+  bool _deviceConnected = false; // Track device connection status
 
   // ===========================================================================
   // LIFECYCLE METHODS
@@ -55,6 +58,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     _deviceSubscription?.cancel();
     _parcelInsideSubscription?.cancel();
     _parcelOutsideSubscription?.cancel();
+    _connectionStatusSubscription?.cancel();
     super.dispose();
   }
 
@@ -68,6 +72,40 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     _deviceSubscription?.cancel();
     _parcelInsideSubscription?.cancel();
     _parcelOutsideSubscription?.cancel();
+    _connectionStatusSubscription?.cancel();
+
+    // ===========================================================================
+    // CONNECTION STATUS LISTENER - NEW
+    // ===========================================================================
+    final connectionPath = '$householdId/${widget.deviceId}/connectionStatus';
+    print("DeviceControlPage listening to connection status: $connectionPath");
+
+    _connectionStatusSubscription = _realtimeDB
+        .child(connectionPath)
+        .onValue
+        .listen(
+          (DatabaseEvent event) {
+            if (event.snapshot.exists && mounted) {
+              final connectionStatus = event.snapshot.value == true;
+              setState(() {
+                _deviceConnected = connectionStatus;
+              });
+              print("DeviceControlPage connection update: ${widget.deviceId} = $connectionStatus");
+            } else {
+              // If connectionStatus doesn't exist, assume device is offline
+              setState(() {
+                _deviceConnected = false;
+              });
+              print("DeviceControlPage connection update: ${widget.deviceId} = OFFLINE (no data)");
+            }
+          },
+          onError: (error) {
+            print("DeviceControlPage connection listener error: $error");
+            setState(() {
+              _deviceConnected = false;
+            });
+          },
+        );
 
     if (deviceType.contains('parcel')) {
       // Parcel box - listen to individual status paths
@@ -146,7 +184,16 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   // DEVICE CONTROL METHODS - FIXED
   // ===========================================================================
   void _toggleDevice() async {
-    if (householdUid == null || _isControlling) {
+    // Check if device is connected before allowing control
+    if (householdUid == null || _isControlling || !_deviceConnected) {
+      if (!_deviceConnected) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Device is offline - cannot control"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 
@@ -160,6 +207,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       print("Device ID: ${widget.deviceId}");
       print("Device Type: ${widget.deviceType}");
       print("Household ID: $householdUid");
+      print("Device Connected: $_deviceConnected");
       print("New Status: $newStatus");
 
       // Update local state first (but don't setState yet to avoid UI flicker)
@@ -181,7 +229,10 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       print("✗ Error controlling device: $error");
       // Don't revert UI - keep previous state
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error controlling device: $error")),
+        SnackBar(
+          content: Text("Error controlling device: $error"),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       _isControlling = false; // Re-enable controls
@@ -516,7 +567,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                       Image.asset(
                         _getDeviceIcon(),
                         width: 80,
-                        color: Colors.blueAccent,
+                        color: _deviceConnected ? Colors.blueAccent : Colors.grey,
                       ),
                       const SizedBox(height: 15),
                       Text(
@@ -532,6 +583,26 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      const SizedBox(height: 10),
+                      // Device Connection Status
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _deviceConnected ? Icons.circle : Icons.circle_outlined,
+                            color: _deviceConnected ? Colors.green : Colors.redAccent,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _deviceConnected ? "Device Online" : "Device Offline",
+                            style: TextStyle(
+                              color: _deviceConnected ? Colors.green : Colors.redAccent,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -545,14 +616,14 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
               width: 200,
               height: 60,
               child: ElevatedButton(
-                onPressed: _isControlling ? null : _toggleDevice,
+                onPressed: (_isControlling || !_deviceConnected) ? null : _toggleDevice,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _getButtonColor(),
+                  backgroundColor: _deviceConnected ? _getButtonColor() : Colors.grey,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(15),
                   ),
                   elevation: 4,
-                  shadowColor: _getButtonColor().withOpacity(0.5),
+                  shadowColor: _deviceConnected ? _getButtonColor().withOpacity(0.5) : Colors.grey,
                 ),
                 child: _isControlling
                     ? const SizedBox(
@@ -586,27 +657,27 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                 borderRadius: BorderRadius.circular(15),
               ),
               child: ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.calendar_month,
-                  color: Colors.blueAccent,
+                  color: _deviceConnected ? Colors.blueAccent : Colors.grey,
                 ),
-                title: const Text(
+                title: Text(
                   "Schedules",
                   style: TextStyle(
-                    color: Colors.white,
+                    color: _deviceConnected ? Colors.white : Colors.grey,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                subtitle: const Text(
-                  "Manage automated schedules",
-                  style: TextStyle(color: Colors.white70),
+                subtitle: Text(
+                  _deviceConnected ? "Manage automated schedules" : "Device offline - schedules disabled",
+                  style: TextStyle(color: _deviceConnected ? Colors.white70 : Colors.grey),
                 ),
-                trailing: const Icon(
+                trailing: Icon(
                   Icons.arrow_forward_ios,
-                  color: Colors.blueAccent,
+                  color: _deviceConnected ? Colors.blueAccent : Colors.grey,
                   size: 16,
                 ),
-                onTap: householdUid == null || _isControlling
+                onTap: (householdUid == null || _isControlling || !_deviceConnected)
                     ? null
                     : () {
                         Navigator.push(
@@ -629,25 +700,50 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
             // Connection Status
             Padding(
               padding: const EdgeInsets.only(bottom: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Column(
                 children: [
-                  Icon(
-                    householdUid != null ? Icons.wifi : Icons.wifi_off,
-                    color: householdUid != null
-                        ? Colors.green
-                        : Colors.redAccent,
-                    size: 16,
+                  // App Connection Status
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        householdUid != null ? Icons.wifi : Icons.wifi_off,
+                        color: householdUid != null
+                            ? Colors.green
+                            : Colors.redAccent,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        householdUid != null ? "App Connected" : "App Disconnected",
+                        style: TextStyle(
+                          color: householdUid != null
+                              ? Colors.green
+                              : Colors.redAccent,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    householdUid != null ? "Connected" : "Disconnected",
-                    style: TextStyle(
-                      color: householdUid != null
-                          ? Colors.green
-                          : Colors.redAccent,
-                      fontSize: 14,
-                    ),
+                  const SizedBox(height: 8),
+                  // Device Connection Status
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _deviceConnected ? Icons.device_hub : Icons.device_hub_outlined,
+                        color: _deviceConnected ? Colors.green : Colors.redAccent,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _deviceConnected ? "Device Online" : "Device Offline",
+                        style: TextStyle(
+                          color: _deviceConnected ? Colors.green : Colors.redAccent,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
