@@ -40,7 +40,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   StreamSubscription<DatabaseEvent>? _parcelInsideSubscription;
   StreamSubscription<DatabaseEvent>? _parcelOutsideSubscription;
   StreamSubscription<DatabaseEvent>? _connectionStatusSubscription;
-  
+
   bool _isControlling = false;
   bool _deviceConnected = false; // Track device connection status
 
@@ -90,13 +90,17 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
               setState(() {
                 _deviceConnected = connectionStatus;
               });
-              print("DeviceControlPage connection update: ${widget.deviceId} = $connectionStatus");
+              print(
+                "DeviceControlPage connection update: ${widget.deviceId} = $connectionStatus",
+              );
             } else {
               // If connectionStatus doesn't exist, assume device is offline
               setState(() {
                 _deviceConnected = false;
               });
-              print("DeviceControlPage connection update: ${widget.deviceId} = OFFLINE (no data)");
+              print(
+                "DeviceControlPage connection update: ${widget.deviceId} = OFFLINE (no data)",
+              );
             }
           },
           onError: (error) {
@@ -184,16 +188,8 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   // DEVICE CONTROL METHODS - FIXED
   // ===========================================================================
   void _toggleDevice() async {
-    // Check if device is connected before allowing control
-    if (householdUid == null || _isControlling || !_deviceConnected) {
-      if (!_deviceConnected) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Device is offline - cannot control"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    // Only check if already controlling, don't check connection status
+    if (householdUid == null || _isControlling) {
       return;
     }
 
@@ -567,7 +563,8 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                       Image.asset(
                         _getDeviceIcon(),
                         width: 80,
-                        color: _deviceConnected ? Colors.blueAccent : Colors.grey,
+                        color: Colors
+                            .blueAccent, // Always blue, not affected by connection status
                       ),
                       const SizedBox(height: 15),
                       Text(
@@ -589,15 +586,21 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            _deviceConnected ? Icons.circle : Icons.circle_outlined,
-                            color: _deviceConnected ? Colors.green : Colors.redAccent,
-                            size: 12,
+                            _deviceConnected ? Icons.wifi : Icons.wifi_off,
+                            color: _deviceConnected
+                                ? Colors.green
+                                : Colors.redAccent,
+                            size: 16,
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            _deviceConnected ? "Device Online" : "Device Offline",
+                            _deviceConnected
+                                ? "Device Online"
+                                : "Device Offline",
                             style: TextStyle(
-                              color: _deviceConnected ? Colors.green : Colors.redAccent,
+                              color: _deviceConnected
+                                  ? Colors.green
+                                  : Colors.redAccent,
                               fontSize: 12,
                             ),
                           ),
@@ -616,14 +619,17 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
               width: 200,
               height: 60,
               child: ElevatedButton(
-                onPressed: (_isControlling || !_deviceConnected) ? null : _toggleDevice,
+                onPressed: _isControlling
+                    ? null
+                    : _toggleDevice, // Only check if controlling, not connection status
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _deviceConnected ? _getButtonColor() : Colors.grey,
+                  backgroundColor:
+                      _getButtonColor(), // Always use the normal button color
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(15),
                   ),
                   elevation: 4,
-                  shadowColor: _deviceConnected ? _getButtonColor().withOpacity(0.5) : Colors.grey,
+                  shadowColor: _getButtonColor().withOpacity(0.5),
                 ),
                 child: _isControlling
                     ? const SizedBox(
@@ -657,27 +663,30 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                 borderRadius: BorderRadius.circular(15),
               ),
               child: ListTile(
-                leading: Icon(
+                leading: const Icon(
                   Icons.calendar_month,
-                  color: _deviceConnected ? Colors.blueAccent : Colors.grey,
+                  color: Colors
+                      .blueAccent, // Always blue, not affected by connection status
                 ),
-                title: Text(
+                title: const Text(
                   "Schedules",
                   style: TextStyle(
-                    color: _deviceConnected ? Colors.white : Colors.grey,
+                    color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                subtitle: Text(
-                  _deviceConnected ? "Manage automated schedules" : "Device offline - schedules disabled",
-                  style: TextStyle(color: _deviceConnected ? Colors.white70 : Colors.grey),
+                subtitle: const Text(
+                  "Manage automated schedules",
+                  style: TextStyle(color: Colors.white70),
                 ),
-                trailing: Icon(
+                trailing: const Icon(
                   Icons.arrow_forward_ios,
-                  color: _deviceConnected ? Colors.blueAccent : Colors.grey,
+                  color: Colors.blueAccent,
                   size: 16,
                 ),
-                onTap: (householdUid == null || _isControlling || !_deviceConnected)
+                onTap:
+                    (householdUid == null ||
+                        _isControlling) // Only check household and controlling status
                     ? null
                     : () {
                         Navigator.push(
@@ -692,60 +701,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                           ),
                         );
                       },
-              ),
-            ),
-
-            const Spacer(),
-
-            // Connection Status
-            Padding(
-              padding: const EdgeInsets.only(bottom: 20),
-              child: Column(
-                children: [
-                  // App Connection Status
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        householdUid != null ? Icons.wifi : Icons.wifi_off,
-                        color: householdUid != null
-                            ? Colors.green
-                            : Colors.redAccent,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        householdUid != null ? "App Connected" : "App Disconnected",
-                        style: TextStyle(
-                          color: householdUid != null
-                              ? Colors.green
-                              : Colors.redAccent,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // Device Connection Status
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _deviceConnected ? Icons.device_hub : Icons.device_hub_outlined,
-                        color: _deviceConnected ? Colors.green : Colors.redAccent,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _deviceConnected ? "Device Online" : "Device Offline",
-                        style: TextStyle(
-                          color: _deviceConnected ? Colors.green : Colors.redAccent,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ),
             ),
           ],
