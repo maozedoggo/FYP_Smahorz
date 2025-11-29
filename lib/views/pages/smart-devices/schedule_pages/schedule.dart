@@ -52,7 +52,7 @@ class _SchedulePageState extends State<SchedulePage> {
         'name': widget.deviceName,
         'type': widget.deviceType,
         'createdAt': FieldValue.serverTimestamp(),
-        'status': widget.deviceType.toLowerCase().contains('parcel') 
+        'status': widget.deviceType.toLowerCase().contains('parcel')
             ? {'insideStatus': false, 'outsideStatus': false}
             : false,
       });
@@ -73,68 +73,69 @@ class _SchedulePageState extends State<SchedulePage> {
   Future<void> _loadSchedulesForDay(DateTime day) async {
     try {
       final dateKey = DateFormat('yyyy-MM-dd').format(day);
+      final devicePath = '${widget.householdUid}/${widget.deviceId}';
 
-      final snapshot = await _firestore
-          .collection('households')
-          .doc(widget.householdUid)
-          .collection('devices')
-          .doc(widget.deviceId)
-          .collection('schedules')
-          .where('date', isEqualTo: dateKey)
-          .orderBy('time')
-          .get();
+      // Load from Realtime Database
+      final snapshot = await _realtimeDB.child('$devicePath/schedules').once();
+
+      final schedules = <Map<String, dynamic>>[];
+
+      if (snapshot.snapshot.value != null) {
+        final data = snapshot.snapshot.value as Map<dynamic, dynamic>;
+
+        data.forEach((key, value) {
+          if (value['date'] == dateKey) {
+            schedules.add({
+              'id': key,
+              'time': value['time'] ?? '',
+              'action': value['action'] ?? '',
+              'door': value['door'] ?? '',
+              'date': value['date'] ?? '',
+              'executed': value['executed'] ?? false,
+              'executedAt': value['executedAt'],
+            });
+          }
+        });
+
+        // Sort by time
+        schedules.sort((a, b) => a['time'].compareTo(b['time']));
+      }
 
       setState(() {
-        _schedules = snapshot.docs.map((doc) {
-          final data = doc.data();
-          return {
-            'id': doc.id,
-            'time': data['time'] ?? '',
-            'action': data['action'] ?? '',
-            'door': data['door'] ?? '',
-            'date': data['date'] ?? '',
-            'executed': data['executed'] ?? false,
-            'executedAt': data['executedAt'],
-            'deviceType': data['deviceType'] ?? widget.deviceType,
-          };
-        }).toList();
+        _schedules = schedules;
         _loading = false;
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading schedules: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading schedules: $e')));
       }
       setState(() => _loading = false);
     }
   }
 
-  Future<void> _addSchedule(String time, String action, {String door = ''}) async {
-    await _ensureDeviceDocument();
-    final dateKey = DateFormat('yyyy-MM-dd').format(selectedDay);
+  Future<void> _addSchedule(
+    String time,
+    String action, {
+    String door = '',
+  }) async {
+    final devicePath = '${widget.householdUid}/${widget.deviceId}';
 
     final scheduleData = {
-      'date': dateKey,
       'time': time,
+      'date': DateFormat('yyyy-MM-dd').format(selectedDay),
       'action': action,
-      'createdAt': FieldValue.serverTimestamp(),
-      'deviceType': widget.deviceType,
       'executed': false,
     };
 
-    // Add door information for parcel box
+    // Add door for parcel box
     if (widget.deviceType.toLowerCase().contains('parcel') && door.isNotEmpty) {
       scheduleData['door'] = door;
     }
 
-    await _firestore
-        .collection('households')
-        .doc(widget.householdUid)
-        .collection('devices')
-        .doc(widget.deviceId)
-        .collection('schedules')
-        .add(scheduleData);
+    // Save directly to Realtime Database
+    await _realtimeDB.child('$devicePath/schedules').push().set(scheduleData);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -146,30 +147,28 @@ class _SchedulePageState extends State<SchedulePage> {
   }
 
   Future<void> _deleteSchedule(String id) async {
-    await _firestore
-        .collection('households')
-        .doc(widget.householdUid)
-        .collection('devices')
-        .doc(widget.deviceId)
-        .collection('schedules')
-        .doc(id)
-        .delete();
+    final devicePath = '${widget.householdUid}/${widget.deviceId}';
+    await _realtimeDB.child('$devicePath/schedules/$id').remove();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Schedule deleted!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Schedule deleted!')));
     }
 
     await _loadSchedulesForDay(selectedDay);
   }
 
   // Manual trigger for testing
-  Future<void> _triggerScheduleNow(String scheduleId, String action, {String door = ''}) async {
+  Future<void> _triggerScheduleNow(
+    String scheduleId,
+    String action, {
+    String door = '',
+  }) async {
     try {
-      // Update Realtime Database directly
       final devicePath = '${widget.householdUid}/${widget.deviceId}';
-      
+
+      // Update device status
       if (widget.deviceType.toLowerCase().contains('parcel')) {
         final doorPath = door == 'Inside' ? 'insideStatus' : 'outsideStatus';
         final status = action == 'Unlock';
@@ -179,68 +178,76 @@ class _SchedulePageState extends State<SchedulePage> {
         await _realtimeDB.child('$devicePath/status').set(status);
       }
 
-      // Mark as executed in Firestore
-      await _firestore
-          .collection('households')
-          .doc(widget.householdUid)
-          .collection('devices')
-          .doc(widget.deviceId)
-          .collection('schedules')
-          .doc(scheduleId)
-          .update({
-            'executed': true,
-            'executedAt': FieldValue.serverTimestamp(),
-            'executedBy': 'manual-trigger',
-          });
+      // Mark as executed
+      await _realtimeDB.child('$devicePath/schedules/$scheduleId').update({
+        'executed': true,
+        'executedAt': DateTime.now().toIso8601String(),
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Schedule executed: $action ${door.isNotEmpty ? '($door)' : ''}')),
+          SnackBar(
+            content: Text(
+              'Schedule executed: $action ${door.isNotEmpty ? '($door)' : ''}',
+            ),
+          ),
         );
       }
-      
+
+      await Future.delayed(const Duration(milliseconds: 300));
       await _loadSchedulesForDay(selectedDay);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error executing schedule: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error executing schedule: $e')));
       }
     }
   }
 
   void _addScheduleDialog() {
-    TimeOfDay? selectedTime = TimeOfDay.now();
-    
-    // Dynamic action selection based on device type
-    String selectedAction = widget.deviceType.toLowerCase().contains('parcel') ? "Unlock" : "Extend";
-    String selectedDoor = "Inside"; // Default for parcel box
-
     showDialog(
       context: context,
       builder: (context) {
+        TimeOfDay? selectedTime = TimeOfDay.now();
+        String selectedAction =
+            widget.deviceType.toLowerCase().contains('parcel')
+            ? "Unlock"
+            : "Extend";
+        String selectedDoor = "Inside";
+
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (dialogContext, setDialogState) {
             return AlertDialog(
               backgroundColor: const Color(0xFF1C2233),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
               title: Text(
                 "Add Schedule for ${widget.deviceName}",
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Time Selection
                   ListTile(
-                    leading: const Icon(Icons.access_time, color: Colors.blueAccent),
+                    leading: const Icon(
+                      Icons.access_time,
+                      color: Colors.blueAccent,
+                    ),
                     title: Text(
-                      selectedTime == null ? "Select time" : selectedTime!.format(context),
+                      selectedTime == null
+                          ? "Select time"
+                          : selectedTime!.format(dialogContext),
                       style: const TextStyle(color: Colors.white),
                     ),
                     onTap: () async {
                       final picked = await showTimePicker(
-                        context: context,
+                        context: dialogContext,
                         initialTime: TimeOfDay.now(),
                         builder: (context, child) {
                           return Theme(
@@ -255,7 +262,9 @@ class _SchedulePageState extends State<SchedulePage> {
                         },
                       );
                       if (picked != null) {
-                        setState(() => selectedTime = picked);
+                        setDialogState(() {
+                          selectedTime = picked;
+                        });
                       }
                     },
                   ),
@@ -263,7 +272,10 @@ class _SchedulePageState extends State<SchedulePage> {
 
                   // Door Selection (Only for Parcel Box)
                   if (widget.deviceType.toLowerCase().contains('parcel')) ...[
-                    const Text("Select Door", style: TextStyle(color: Colors.white70)),
+                    const Text(
+                      "Select Door",
+                      style: TextStyle(color: Colors.white70),
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -271,24 +283,36 @@ class _SchedulePageState extends State<SchedulePage> {
                         ChoiceChip(
                           label: const Text("Inside"),
                           labelStyle: TextStyle(
-                            color: selectedDoor == "Inside" ? Colors.white : Colors.black,
+                            color: selectedDoor == "Inside"
+                                ? Colors.white
+                                : Colors.black,
                           ),
                           selected: selectedDoor == "Inside",
                           selectedColor: Colors.blueAccent,
                           onSelected: (selected) {
-                            if (selected) setState(() => selectedDoor = "Inside");
+                            if (selected) {
+                              setDialogState(() {
+                                selectedDoor = "Inside";
+                              });
+                            }
                           },
                         ),
                         const SizedBox(width: 10),
                         ChoiceChip(
                           label: const Text("Outside"),
                           labelStyle: TextStyle(
-                            color: selectedDoor == "Outside" ? Colors.white : Colors.black,
+                            color: selectedDoor == "Outside"
+                                ? Colors.white
+                                : Colors.black,
                           ),
                           selected: selectedDoor == "Outside",
                           selectedColor: Colors.greenAccent,
                           onSelected: (selected) {
-                            if (selected) setState(() => selectedDoor = "Outside");
+                            if (selected) {
+                              setDialogState(() {
+                                selectedDoor = "Outside";
+                              });
+                            }
                           },
                         ),
                       ],
@@ -297,30 +321,122 @@ class _SchedulePageState extends State<SchedulePage> {
                   ],
 
                   // Action Selection
-                  const Text("Select Action", style: TextStyle(color: Colors.white70)),
+                  const Text(
+                    "Select Action",
+                    style: TextStyle(color: Colors.white70),
+                  ),
                   const SizedBox(height: 8),
-                  if (widget.deviceType.toLowerCase().contains('parcel')) 
-                    _buildParcelBoxActions(selectedAction, setState)
-                  else 
-                    _buildClothesHangerActions(selectedAction, setState),
+
+                  // Inline action chips (not using separate method)
+                  if (widget.deviceType.toLowerCase().contains('parcel'))
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ChoiceChip(
+                          label: const Text("Unlock"),
+                          labelStyle: TextStyle(
+                            color: selectedAction == "Unlock"
+                                ? Colors.white
+                                : Colors.black,
+                          ),
+                          selected: selectedAction == "Unlock",
+                          selectedColor: Colors.green,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setDialogState(() {
+                                selectedAction = "Unlock";
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 10),
+                        ChoiceChip(
+                          label: const Text("Lock"),
+                          labelStyle: TextStyle(
+                            color: selectedAction == "Lock"
+                                ? Colors.white
+                                : Colors.black,
+                          ),
+                          selected: selectedAction == "Lock",
+                          selectedColor: Colors.redAccent,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setDialogState(() {
+                                selectedAction = "Lock";
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    )
+                  else
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ChoiceChip(
+                          label: const Text("Extend"),
+                          labelStyle: TextStyle(
+                            color: selectedAction == "Extend"
+                                ? Colors.white
+                                : Colors.black,
+                          ),
+                          selected: selectedAction == "Extend",
+                          selectedColor: Colors.blueAccent,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setDialogState(() {
+                                selectedAction = "Extend";
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 10),
+                        ChoiceChip(
+                          label: const Text("Retract"),
+                          labelStyle: TextStyle(
+                            color: selectedAction == "Retract"
+                                ? Colors.white
+                                : Colors.black,
+                          ),
+                          selected: selectedAction == "Retract",
+                          selectedColor: Colors.redAccent,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setDialogState(() {
+                                selectedAction = "Retract";
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
                 ],
               ),
               actions: [
                 TextButton(
-                  child: const Text("Cancel", style: TextStyle(color: Colors.white70)),
-                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  onPressed: () => Navigator.pop(dialogContext),
                 ),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                  ),
                   child: const Text("Add"),
                   onPressed: () async {
                     if (selectedTime != null) {
-                      // Convert to 24-hour format for consistency
-                      final formattedTime = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}';
-                      Navigator.pop(context);
-                      
+                      final formattedTime =
+                          '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}';
+                      Navigator.pop(dialogContext);
+
                       if (widget.deviceType.toLowerCase().contains('parcel')) {
-                        await _addSchedule(formattedTime, selectedAction, door: selectedDoor);
+                        await _addSchedule(
+                          formattedTime,
+                          selectedAction,
+                          door: selectedDoor,
+                        );
                       } else {
                         await _addSchedule(formattedTime, selectedAction);
                       }
@@ -456,7 +572,11 @@ class _SchedulePageState extends State<SchedulePage> {
             Align(
               child: Text(
                 "${widget.deviceName} Schedules",
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
 
@@ -469,8 +589,14 @@ class _SchedulePageState extends State<SchedulePage> {
               onDaySelected: _onDaySelected,
               selectedDayPredicate: (day) => isSameDay(selectedDay, day),
               calendarStyle: CalendarStyle(
-                todayDecoration: BoxDecoration(color: Colors.grey[850], shape: BoxShape.circle),
-                selectedDecoration: BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
+                todayDecoration: BoxDecoration(
+                  color: Colors.grey[850],
+                  shape: BoxShape.circle,
+                ),
+                selectedDecoration: BoxDecoration(
+                  color: Colors.blueAccent,
+                  shape: BoxShape.circle,
+                ),
                 weekendTextStyle: const TextStyle(color: Colors.redAccent),
                 defaultTextStyle: const TextStyle(color: Colors.white),
                 disabledTextStyle: const TextStyle(color: Colors.grey),
@@ -478,8 +604,14 @@ class _SchedulePageState extends State<SchedulePage> {
               headerStyle: const HeaderStyle(
                 formatButtonVisible: false,
                 titleCentered: true,
-                leftChevronIcon: Icon(Icons.chevron_left, color: Colors.white70),
-                rightChevronIcon: Icon(Icons.chevron_right, color: Colors.white70),
+                leftChevronIcon: Icon(
+                  Icons.chevron_left,
+                  color: Colors.white70,
+                ),
+                rightChevronIcon: Icon(
+                  Icons.chevron_right,
+                  color: Colors.white70,
+                ),
                 titleTextStyle: TextStyle(fontSize: 20, color: Colors.white),
               ),
             ),
@@ -490,11 +622,18 @@ class _SchedulePageState extends State<SchedulePage> {
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Row(
                 children: [
-                  const Icon(Icons.schedule, color: Colors.blueAccent, size: 22),
+                  const Icon(
+                    Icons.schedule,
+                    color: Colors.blueAccent,
+                    size: 22,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     "Schedules for $selectedDateStr",
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -504,7 +643,11 @@ class _SchedulePageState extends State<SchedulePage> {
 
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: Colors.blueAccent))
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.blueAccent,
+                      ),
+                    )
                   : _schedules.isEmpty
                   ? const Center(
                       child: Text(
@@ -521,18 +664,22 @@ class _SchedulePageState extends State<SchedulePage> {
                         return Card(
                           color: const Color(0xFF1C2233),
                           margin: const EdgeInsets.only(bottom: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
                           child: ListTile(
                             leading: Icon(
-                              Icons.access_time, 
+                              Icons.access_time,
                               color: _getScheduleStatusColor(schedule),
                             ),
                             title: Text(
                               _getScheduleDisplayText(schedule),
                               style: TextStyle(
-                                color: Colors.white, 
+                                color: Colors.white,
                                 fontWeight: FontWeight.bold,
-                                decoration: schedule['executed'] == true ? TextDecoration.lineThrough : TextDecoration.none,
+                                decoration: schedule['executed'] == true
+                                    ? TextDecoration.lineThrough
+                                    : TextDecoration.none,
                               ),
                             ),
                             subtitle: Column(
@@ -545,7 +692,9 @@ class _SchedulePageState extends State<SchedulePage> {
                                 Text(
                                   _getExecutionInfo(schedule),
                                   style: TextStyle(
-                                    color: schedule['executed'] == true ? Colors.green : Colors.orange,
+                                    color: schedule['executed'] == true
+                                        ? Colors.green
+                                        : Colors.orange,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -557,16 +706,23 @@ class _SchedulePageState extends State<SchedulePage> {
                                 // Manual trigger button
                                 if (schedule['executed'] != true)
                                   IconButton(
-                                    icon: const Icon(Icons.play_arrow, color: Colors.green),
+                                    icon: const Icon(
+                                      Icons.play_arrow,
+                                      color: Colors.green,
+                                    ),
                                     onPressed: () => _triggerScheduleNow(
-                                      schedule['id'], 
+                                      schedule['id'],
                                       schedule['action'],
                                       door: schedule['door'] ?? '',
                                     ),
                                   ),
                                 IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.redAccent),
-                                  onPressed: () => _deleteSchedule(schedule['id']),
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: Colors.redAccent,
+                                  ),
+                                  onPressed: () =>
+                                      _deleteSchedule(schedule['id']),
                                 ),
                               ],
                             ),
