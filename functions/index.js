@@ -70,19 +70,16 @@ exports.checkSchedules = onSchedule({
               if (schedule.door) {
                 // Parcel Box - has door selection
                 const doorPath = schedule.door === 'Inside' ? 'insideStatus' : 'outsideStatus';
-                // CHANGE THIS LINE:
                 const status = schedule.action === 'Lock';
 
                 await db.ref(`${devicePath}/${doorPath}`).set(status);
                 console.log(`✅ Updated ${devicePath}/${doorPath} = ${status}`);
               } else {
-                // Clothes Hanger - update both status fields
-                // CHANGE THIS LINE:
+                // Clothes Hanger - update only status field
                 const status = schedule.action === 'Extend';
 
-                await db.ref(`${devicePath}/insideStatus`).set(status);
-                await db.ref(`${devicePath}/outsideStatus`).set(status);
-                console.log(`✅ Updated both status fields = ${status}`);
+                await db.ref(`${devicePath}/status`).set(status);
+                console.log(`✅ Updated ${devicePath}/status = ${status}`);
               }
 
               // Mark schedule as executed
