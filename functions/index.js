@@ -73,25 +73,43 @@ exports.checkSchedules = onSchedule({
               schedule.date === currentDate && 
               schedule.executed === false) {
             
-            console.log(`🎯 Executing schedule ${scheduleId} for device ${deviceId}: ${schedule.action}`);
+            console.log(`🎯 Executing schedule ${scheduleId} for device ${deviceId}`);
+            console.log(`📋 Schedule details:`, schedule);
             
             try {
               // Update device status based on action
               const devicePath = `${householdUid}/${deviceId}`;
               
               if (schedule.door) {
-                // Parcel Box - has door selection
+                // PARCEL BOX - Use door-specific status
                 const doorPath = schedule.door === 'Inside' ? 'insideStatus' : 'outsideStatus';
                 const status = schedule.action === 'Unlock';
                 
+                console.log(`🚪 PARCEL BOX - Door: ${schedule.door}, Action: ${schedule.action}, Setting ${doorPath} to: ${status}`);
+                
                 await db.ref(`${devicePath}/${doorPath}`).set(status);
-                console.log(`✅ Updated ${devicePath}/${doorPath} = ${status} (${schedule.action})`);
+                console.log(`✅ Updated ${devicePath}/${doorPath} = ${status}`);
+                
+                // Verify the update worked
+                const verifySnapshot = await db.ref(`${devicePath}/${doorPath}`).once('value');
+                console.log(`🔍 VERIFICATION: ${devicePath}/${doorPath} is now: ${verifySnapshot.val()}`);
+                
               } else {
-                // Clothes Hanger - simple status
+                // CLOTHES HANGER - Use both status fields
                 const status = schedule.action === 'Extend';
                 
-                await db.ref(`${devicePath}/status`).set(status);
-                console.log(`✅ Updated ${devicePath}/status = ${status} (${schedule.action})`);
+                console.log(`📏 CLOTHES HANGER - Action: ${schedule.action}, Setting both insideStatus and outsideStatus to: ${status}`);
+                
+                // Update both fields for clothes hanger
+                await db.ref(`${devicePath}/insideStatus`).set(status);
+                await db.ref(`${devicePath}/outsideStatus`).set(status);
+                console.log(`✅ Updated ${devicePath}/insideStatus = ${status}`);
+                console.log(`✅ Updated ${devicePath}/outsideStatus = ${status}`);
+                
+                // Verify the updates worked
+                const verifyInside = await db.ref(`${devicePath}/insideStatus`).once('value');
+                const verifyOutside = await db.ref(`${devicePath}/outsideStatus`).once('value');
+                console.log(`🔍 VERIFICATION: insideStatus: ${verifyInside.val()}, outsideStatus: ${verifyOutside.val()}`);
               }
               
               // Mark schedule as executed
@@ -122,5 +140,114 @@ exports.checkSchedules = onSchedule({
   } catch (error) {
     console.error('❌ Error in schedule check:', error);
     throw error;
+  }
+});
+
+// ============================================================================
+// TEST FUNCTION - Manual device control for testing
+// ============================================================================
+
+/**
+ * Manual test function to verify device control
+ * Usage: Call via HTTP to test device status updates
+ */
+exports.testDeviceControl = require('firebase-functions').https.onRequest(async (req, res) => {
+  try {
+    const { householdUid, deviceId, action, door } = req.query;
+    
+    if (!householdUid || !deviceId || !action) {
+      return res.status(400).json({
+        error: 'Missing required parameters: householdUid, deviceId, action'
+      });
+    }
+    
+    console.log(`🧪 Manual test: ${householdUid}/${deviceId} - ${action} ${door ? `(${door})` : ''}`);
+    
+    const devicePath = `${householdUid}/${deviceId}`;
+    
+    if (door) {
+      // Parcel Box test
+      const doorPath = door === 'Inside' ? 'insideStatus' : 'outsideStatus';
+      const status = action === 'Unlock';
+      
+      await db.ref(`${devicePath}/${doorPath}`).set(status);
+      console.log(`✅ Set ${devicePath}/${doorPath} = ${status}`);
+      
+    } else {
+      // Clothes Hanger test
+      const status = action === 'Extend';
+      
+      await db.ref(`${devicePath}/insideStatus`).set(status);
+      await db.ref(`${devicePath}/outsideStatus`).set(status);
+      console.log(`✅ Set both status fields = ${status}`);
+    }
+    
+    res.json({
+      success: true,
+      message: `Device control test completed: ${action} ${door ? `(${door})` : ''}`,
+      path: devicePath,
+      status: action === 'Unlock' || action === 'Extend'
+    });
+    
+  } catch (error) {
+    console.error('❌ Test function error:', error);
+    res.status(500).json({
+      error: 'Test failed',
+      details: error.message
+    });
+  }
+});
+
+// ============================================================================
+// CLEANUP FUNCTION - Remove old executed schedules
+// ============================================================================
+
+/**
+ * Cleanup function to remove old executed schedules (older than 30 days)
+ * Runs once per day to keep database clean
+ */
+exports.cleanupOldSchedules = onSchedule({
+  schedule: '0 2 * * *', // 2 AM daily
+  timeZone: 'Asia/Kuala_Lumpur',
+  region: 'asia-southeast1'
+}, async (event) => {
+  try {
+    console.log('🧹 Cleaning up old executed schedules...');
+    
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const cutoffDate = thirtyDaysAgo.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    console.log(`🗑️ Removing schedules older than: ${cutoffDate}`);
+    
+    const householdsSnapshot = await db.ref('/').once('value');
+    const households = householdsSnapshot.val() || {};
+    
+    let totalRemoved = 0;
+    
+    for (const [householdUid, householdData] of Object.entries(households)) {
+      if (typeof householdData !== 'object') continue;
+      
+      for (const [deviceId, deviceData] of Object.entries(householdData)) {
+        if (!deviceData.schedules) continue;
+        
+        const schedules = deviceData.schedules;
+        const devicePath = `${householdUid}/${deviceId}`;
+        
+        for (const [scheduleId, schedule] of Object.entries(schedules)) {
+          // Remove if executed and older than 30 days
+          if (schedule.executed === true && schedule.date < cutoffDate) {
+            await db.ref(`${devicePath}/schedules/${scheduleId}`).remove();
+            console.log(`🗑️ Removed old schedule: ${scheduleId} (${schedule.date})`);
+            totalRemoved++;
+          }
+        }
+      }
+    }
+    
+    console.log(`✅ Cleanup completed: Removed ${totalRemoved} old schedules`);
+    
+  } catch (error) {
+    console.error('❌ Cleanup error:', error);
   }
 });
