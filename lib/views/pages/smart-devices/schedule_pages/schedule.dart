@@ -34,29 +34,8 @@ class _SchedulePageState extends State<SchedulePage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _ensureDeviceDocument();
       await _loadSchedulesForDay(selectedDay);
     });
-  }
-
-  Future<void> _ensureDeviceDocument() async {
-    final deviceDocRef = _firestore
-        .collection('households')
-        .doc(widget.householdUid)
-        .collection('devices')
-        .doc(widget.deviceId);
-
-    final docSnapshot = await deviceDocRef.get();
-    if (!docSnapshot.exists) {
-      await deviceDocRef.set({
-        'name': widget.deviceName,
-        'type': widget.deviceType,
-        'createdAt': FieldValue.serverTimestamp(),
-        'status': widget.deviceType.toLowerCase().contains('parcel')
-            ? {'insideStatus': false, 'outsideStatus': false}
-            : false,
-      });
-    }
   }
 
   void _onDaySelected(DateTime day, DateTime focusedDay) {
@@ -75,6 +54,8 @@ class _SchedulePageState extends State<SchedulePage> {
       final dateKey = DateFormat('yyyy-MM-dd').format(day);
       final devicePath = '${widget.householdUid}/${widget.deviceId}';
 
+      print('📅 Loading schedules for: $dateKey from path: $devicePath/schedules');
+
       // Load from Realtime Database
       final snapshot = await _realtimeDB.child('$devicePath/schedules').once();
 
@@ -83,8 +64,11 @@ class _SchedulePageState extends State<SchedulePage> {
       if (snapshot.snapshot.value != null) {
         final data = snapshot.snapshot.value as Map<dynamic, dynamic>;
 
+        print('📦 Raw schedule data: $data');
+
         data.forEach((key, value) {
           if (value['date'] == dateKey) {
+            print('✅ Found matching schedule: $key -> $value');
             schedules.add({
               'id': key,
               'time': value['time'] ?? '',
@@ -99,17 +83,22 @@ class _SchedulePageState extends State<SchedulePage> {
 
         // Sort by time
         schedules.sort((a, b) => a['time'].compareTo(b['time']));
+      } else {
+        print('⚠️ No schedule data found at path: $devicePath/schedules');
       }
+
+      print('📋 Total schedules loaded: ${schedules.length}');
 
       setState(() {
         _schedules = schedules;
         _loading = false;
       });
     } catch (e) {
+      print('❌ Error loading schedules: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error loading schedules: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading schedules: $e')),
+        );
       }
       setState(() => _loading = false);
     }
@@ -134,6 +123,8 @@ class _SchedulePageState extends State<SchedulePage> {
       scheduleData['door'] = door;
     }
 
+    print('➕ Adding schedule: $scheduleData to path: $devicePath/schedules');
+
     // Save directly to Realtime Database
     await _realtimeDB.child('$devicePath/schedules').push().set(scheduleData);
 
@@ -148,12 +139,15 @@ class _SchedulePageState extends State<SchedulePage> {
 
   Future<void> _deleteSchedule(String id) async {
     final devicePath = '${widget.householdUid}/${widget.deviceId}';
+    
+    print('🗑️ Deleting schedule: $id from path: $devicePath/schedules/$id');
+    
     await _realtimeDB.child('$devicePath/schedules/$id').remove();
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Schedule deleted!')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Schedule deleted!')),
+      );
     }
 
     await _loadSchedulesForDay(selectedDay);
@@ -168,20 +162,29 @@ class _SchedulePageState extends State<SchedulePage> {
     try {
       final devicePath = '${widget.householdUid}/${widget.deviceId}';
 
+      print('▶️ Triggering schedule: $scheduleId with action: $action');
+
       // Update device status
       if (widget.deviceType.toLowerCase().contains('parcel')) {
         final doorPath = door == 'Inside' ? 'insideStatus' : 'outsideStatus';
         final status = action == 'Unlock';
+        
+        print('🚪 Updating $devicePath/$doorPath = $status');
         await _realtimeDB.child('$devicePath/$doorPath').set(status);
       } else {
         final status = action == 'Extend';
+        
+        print('📏 Updating $devicePath/status = $status');
         await _realtimeDB.child('$devicePath/status').set(status);
       }
 
       // Mark as executed
+      final executedTime = DateTime.now().toIso8601String();
+      print('✅ Marking schedule as executed at: $executedTime');
+      
       await _realtimeDB.child('$devicePath/schedules/$scheduleId').update({
         'executed': true,
-        'executedAt': DateTime.now().toIso8601String(),
+        'executedAt': executedTime,
       });
 
       if (mounted) {
@@ -194,13 +197,14 @@ class _SchedulePageState extends State<SchedulePage> {
         );
       }
 
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 500));
       await _loadSchedulesForDay(selectedDay);
     } catch (e) {
+      print('❌ Error executing schedule: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error executing schedule: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error executing schedule: $e')),
+        );
       }
     }
   }
@@ -212,8 +216,8 @@ class _SchedulePageState extends State<SchedulePage> {
         TimeOfDay? selectedTime = TimeOfDay.now();
         String selectedAction =
             widget.deviceType.toLowerCase().contains('parcel')
-            ? "Unlock"
-            : "Extend";
+                ? "Unlock"
+                : "Extend";
         String selectedDoor = "Inside";
 
         return StatefulBuilder(
@@ -327,7 +331,7 @@ class _SchedulePageState extends State<SchedulePage> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Inline action chips (not using separate method)
+                  // Inline action chips
                   if (widget.deviceType.toLowerCase().contains('parcel'))
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -455,68 +459,6 @@ class _SchedulePageState extends State<SchedulePage> {
     );
   }
 
-  Widget _buildParcelBoxActions(String selectedAction, Function setState) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        ChoiceChip(
-          label: const Text("Unlock"),
-          labelStyle: TextStyle(
-            color: selectedAction == "Unlock" ? Colors.white : Colors.black,
-          ),
-          selected: selectedAction == "Unlock",
-          selectedColor: Colors.green,
-          onSelected: (selected) {
-            if (selected) setState(() => selectedAction = "Unlock");
-          },
-        ),
-        const SizedBox(width: 10),
-        ChoiceChip(
-          label: const Text("Lock"),
-          labelStyle: TextStyle(
-            color: selectedAction == "Lock" ? Colors.white : Colors.black,
-          ),
-          selected: selectedAction == "Lock",
-          selectedColor: Colors.redAccent,
-          onSelected: (selected) {
-            if (selected) setState(() => selectedAction = "Lock");
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildClothesHangerActions(String selectedAction, Function setState) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        ChoiceChip(
-          label: const Text("Extend"),
-          labelStyle: TextStyle(
-            color: selectedAction == "Extend" ? Colors.white : Colors.black,
-          ),
-          selected: selectedAction == "Extend",
-          selectedColor: Colors.blueAccent,
-          onSelected: (selected) {
-            if (selected) setState(() => selectedAction = "Extend");
-          },
-        ),
-        const SizedBox(width: 10),
-        ChoiceChip(
-          label: const Text("Retract"),
-          labelStyle: TextStyle(
-            color: selectedAction == "Retract" ? Colors.white : Colors.black,
-          ),
-          selected: selectedAction == "Retract",
-          selectedColor: Colors.redAccent,
-          onSelected: (selected) {
-            if (selected) setState(() => selectedAction = "Retract");
-          },
-        ),
-      ],
-    );
-  }
-
   String _getScheduleDisplayText(Map<String, dynamic> schedule) {
     if (widget.deviceType.toLowerCase().contains('parcel')) {
       final door = schedule['door'] ?? '';
@@ -534,9 +476,15 @@ class _SchedulePageState extends State<SchedulePage> {
   String _getExecutionInfo(Map<String, dynamic> schedule) {
     if (schedule['executed'] == true) {
       final executedAt = schedule['executedAt'];
-      if (executedAt != null) {
-        final date = executedAt.toDate();
-        return 'Executed at ${DateFormat('HH:mm').format(date)}';
+      if (executedAt != null && executedAt is String) {
+        try {
+          // Parse ISO8601 string from Realtime Database
+          final date = DateTime.parse(executedAt);
+          return 'Executed at ${DateFormat('HH:mm').format(date)}';
+        } catch (e) {
+          print('⚠️ Error parsing executedAt: $e');
+          return 'Executed';
+        }
       }
       return 'Executed';
     }
@@ -568,7 +516,6 @@ class _SchedulePageState extends State<SchedulePage> {
                 ),
               ),
             ),
-
             Align(
               child: Text(
                 "${widget.deviceName} Schedules",
@@ -579,7 +526,6 @@ class _SchedulePageState extends State<SchedulePage> {
                 ),
               ),
             ),
-
             TableCalendar(
               focusedDay: selectedDay,
               firstDay: DateTime.now(),
@@ -593,7 +539,7 @@ class _SchedulePageState extends State<SchedulePage> {
                   color: Colors.grey[850],
                   shape: BoxShape.circle,
                 ),
-                selectedDecoration: BoxDecoration(
+                selectedDecoration: const BoxDecoration(
                   color: Colors.blueAccent,
                   shape: BoxShape.circle,
                 ),
@@ -615,9 +561,7 @@ class _SchedulePageState extends State<SchedulePage> {
                 titleTextStyle: TextStyle(fontSize: 20, color: Colors.white),
               ),
             ),
-
             const SizedBox(height: 10),
-
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Row(
@@ -638,9 +582,7 @@ class _SchedulePageState extends State<SchedulePage> {
                 ],
               ),
             ),
-
             const SizedBox(height: 10),
-
             Expanded(
               child: _loading
                   ? const Center(
@@ -649,87 +591,88 @@ class _SchedulePageState extends State<SchedulePage> {
                       ),
                     )
                   : _schedules.isEmpty
-                  ? const Center(
-                      child: Text(
-                        "No schedules yet.\nTap + to add one!",
-                        style: TextStyle(color: Colors.white54, fontSize: 16),
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: _schedules.length,
-                      itemBuilder: (context, index) {
-                        final schedule = _schedules[index];
-                        return Card(
-                          color: const Color(0xFF1C2233),
-                          margin: const EdgeInsets.only(bottom: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
+                      ? const Center(
+                          child: Text(
+                            "No schedules yet.\nTap + to add one!",
+                            style: TextStyle(color: Colors.white54, fontSize: 16),
+                            textAlign: TextAlign.center,
                           ),
-                          child: ListTile(
-                            leading: Icon(
-                              Icons.access_time,
-                              color: _getScheduleStatusColor(schedule),
-                            ),
-                            title: Text(
-                              _getScheduleDisplayText(schedule),
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                decoration: schedule['executed'] == true
-                                    ? TextDecoration.lineThrough
-                                    : TextDecoration.none,
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          itemCount: _schedules.length,
+                          itemBuilder: (context, index) {
+                            final schedule = _schedules[index];
+                            return Card(
+                              color: const Color(0xFF1C2233),
+                              margin: const EdgeInsets.only(bottom: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
                               ),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  schedule['time'],
-                                  style: const TextStyle(color: Colors.white70),
+                              child: ListTile(
+                                leading: Icon(
+                                  Icons.access_time,
+                                  color: _getScheduleStatusColor(schedule),
                                 ),
-                                Text(
-                                  _getExecutionInfo(schedule),
+                                title: Text(
+                                  _getScheduleDisplayText(schedule),
                                   style: TextStyle(
-                                    color: schedule['executed'] == true
-                                        ? Colors.green
-                                        : Colors.orange,
-                                    fontSize: 12,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    decoration: schedule['executed'] == true
+                                        ? TextDecoration.lineThrough
+                                        : TextDecoration.none,
                                   ),
                                 ),
-                              ],
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Manual trigger button
-                                if (schedule['executed'] != true)
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.play_arrow,
-                                      color: Colors.green,
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      schedule['time'],
+                                      style:
+                                          const TextStyle(color: Colors.white70),
                                     ),
-                                    onPressed: () => _triggerScheduleNow(
-                                      schedule['id'],
-                                      schedule['action'],
-                                      door: schedule['door'] ?? '',
+                                    Text(
+                                      _getExecutionInfo(schedule),
+                                      style: TextStyle(
+                                        color: schedule['executed'] == true
+                                            ? Colors.green
+                                            : Colors.orange,
+                                        fontSize: 12,
+                                      ),
                                     ),
-                                  ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.delete,
-                                    color: Colors.redAccent,
-                                  ),
-                                  onPressed: () =>
-                                      _deleteSchedule(schedule['id']),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Manual trigger button
+                                    if (schedule['executed'] != true)
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.play_arrow,
+                                          color: Colors.green,
+                                        ),
+                                        onPressed: () => _triggerScheduleNow(
+                                          schedule['id'],
+                                          schedule['action'],
+                                          door: schedule['door'] ?? '',
+                                        ),
+                                      ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        color: Colors.redAccent,
+                                      ),
+                                      onPressed: () =>
+                                          _deleteSchedule(schedule['id']),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
             ),
           ],
         ),
