@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -25,7 +26,11 @@ class SchedulePage extends StatefulWidget {
 class _SchedulePageState extends State<SchedulePage> {
   DateTime selectedDay = DateTime.now();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final DatabaseReference _realtimeDB = FirebaseDatabase.instance.ref();
+  final DatabaseReference _realtimeDB = FirebaseDatabase.instanceFor(
+    app: Firebase.app(),
+    databaseURL:
+        "https://smahorz-fyp-default-rtdb.asia-southeast1.firebasedatabase.app",
+  ).ref();
 
   List<Map<String, dynamic>> _schedules = [];
   bool _loading = true;
@@ -222,7 +227,7 @@ class _SchedulePageState extends State<SchedulePage> {
       // Update device status in Realtime Database
       if (widget.deviceType.toLowerCase().contains('parcel')) {
         final doorPath = door == 'Inside' ? 'insideStatus' : 'outsideStatus';
-        final status = action == 'Unlock';
+        final status = action == 'Lock';
 
         print('🚪 Updating $devicePath/$doorPath = $status');
         await _realtimeDB.child('$devicePath/$doorPath').set(status);
