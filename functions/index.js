@@ -1,22 +1,25 @@
 const { onRequest } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/firestore');
 const admin = require('firebase-admin');
 
 // Initialize Firebase Admin
 admin.initializeApp();
 
-// Get Realtime Database reference
-const db = admin.database();
+// Get both database references
+const db = admin.database(); // Realtime Database
+const firestore = admin.firestore(); // Firestore
 
 // ============================================================================
-// SCHEDULE SYSTEM FUNCTIONS (Realtime Database)
+// HYBRID SCHEDULE SYSTEM (Works with your Flutter app)
 // ============================================================================
 
 /**
- * Check and execute scheduled tasks every 5 minutes
+ * Check and execute scheduled tasks every minute
+ * This checks FIRESTORE schedules (from your Flutter app)
  */
 exports.checkSchedules = onSchedule({
-  schedule: 'every 5 minutes',
+  schedule: 'every 1 minutes',
   timeZone: 'Asia/Kuala_Lumpur',
   region: 'asia-southeast1',
   memory: '256MiB'
@@ -24,37 +27,79 @@ exports.checkSchedules = onSchedule({
   try {
     console.log('🔔 Checking scheduled tasks...');
     const now = new Date();
-    const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // "HH:MM"
+    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const currentDate = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
     
-    // Get all schedules from Realtime Database
-    const schedulesRef = db.ref('schedules');
-    const snapshot = await schedulesRef.once('value');
+    console.log(`Current time: ${currentTime}, Current date: ${currentDate}`);
     
-    if (!snapshot.exists()) {
-      console.log('No schedules found');
-      return;
-    }
+    // Get all households
+    const householdsSnapshot = await firestore.collection('households').get();
     
-    const schedules = snapshot.val();
-    const executedTasks = [];
+    let totalExecuted = 0;
     
-    // Check each schedule
-    for (const [scheduleId, schedule] of Object.entries(schedules)) {
-      if (schedule.time === currentTime && schedule.enabled) {
-        console.log(`🎯 Executing schedule: ${schedule.name} at ${schedule.time}`);
+    for (const householdDoc of householdsSnapshot.docs) {
+      const householdUid = householdDoc.id;
+      
+      // Get all devices in this household
+      const devicesSnapshot = await firestore
+        .collection('households')
+        .doc(householdUid)
+        .collection('devices')
+        .get();
+      
+      for (const deviceDoc of devicesSnapshot.docs) {
+        const deviceId = deviceDoc.id;
+        const deviceData = deviceDoc.data();
         
-        // Execute the scheduled task
-        await executeScheduleTask(scheduleId, schedule);
-        executedTasks.push(schedule.name);
+        // Get schedules for this device that match current time and date
+        const schedulesSnapshot = await firestore
+          .collection('households')
+          .doc(householdUid)
+          .collection('devices')
+          .doc(deviceId)
+          .collection('schedules')
+          .where('date', '==', currentDate)
+          .where('time', '==', currentTime)
+          .where('executed', '==', false)
+          .get();
         
-        // Update last executed time
-        await schedulesRef.child(scheduleId).update({
-          lastExecuted: now.toISOString()
-        });
+        for (const scheduleDoc of schedulesSnapshot.docs) {
+          const schedule = scheduleDoc.data();
+          const scheduleId = scheduleDoc.id;
+          
+          console.log(`🎯 Executing schedule for device ${deviceId}: ${schedule.action}`);
+          
+          // Execute the schedule
+          await executeSchedule(householdUid, deviceId, deviceData.type, schedule);
+          
+          // Mark as executed
+          await scheduleDoc.ref.update({
+            executed: true,
+            executedAt: admin.firestore.FieldValue.serverTimestamp(),
+            executedBy: 'auto-scheduler'
+          });
+          
+          totalExecuted++;
+          
+          // Log execution
+          await firestore
+            .collection('households')
+            .doc(householdUid)
+            .collection('schedule_logs')
+            .add({
+              deviceId,
+              deviceName: deviceData.name,
+              scheduleId,
+              action: schedule.action,
+              door: schedule.door || null,
+              executedAt: admin.firestore.FieldValue.serverTimestamp(),
+              status: 'success'
+            });
+        }
       }
     }
     
-    console.log(`✅ Executed ${executedTasks.length} tasks:`, executedTasks);
+    console.log(`✅ Executed ${totalExecuted} schedules`);
     
   } catch (error) {
     console.error('❌ Error in schedule check:', error);
@@ -63,116 +108,104 @@ exports.checkSchedules = onSchedule({
 });
 
 /**
- * Execute individual schedule task
+ * Execute a schedule by updating Realtime Database
  */
-async function executeScheduleTask(scheduleId, schedule) {
+async function executeSchedule(householdUid, deviceId, deviceType, schedule) {
   try {
-    // Based on schedule type, perform different actions
-    switch (schedule.type) {
-      case 'device_control':
-        // Control Arduino devices
-        await controlDevice(schedule.deviceId, schedule.action);
-        break;
-        
-      case 'notification':
-        // Send notification
-        await sendNotification(schedule.title, schedule.message);
-        break;
-        
-      case 'data_cleanup':
-        // Clean up old data
-        await cleanupData();
-        break;
-        
-      default:
-        console.log(`Unknown schedule type: ${schedule.type}`);
+    const devicePath = `${householdUid}/${deviceId}`;
+    
+    // Handle Parcel Box
+    if (deviceType && deviceType.toLowerCase().includes('parcel')) {
+      const door = schedule.door || 'Inside';
+      const doorPath = door === 'Inside' ? 'insideStatus' : 'outsideStatus';
+      const status = schedule.action === 'Unlock';
+      
+      await db.ref(`${devicePath}/${doorPath}`).set(status);
+      console.log(`✅ Updated ${devicePath}/${doorPath} to ${status}`);
+    } 
+    // Handle Clothes Hanger
+    else {
+      const status = schedule.action === 'Extend';
+      await db.ref(`${devicePath}/status`).set(status);
+      console.log(`✅ Updated ${devicePath}/status to ${status}`);
     }
     
-    // Log the execution
-    await db.ref('schedule_logs').push({
-      scheduleId,
-      scheduleName: schedule.name,
-      executedAt: new Date().toISOString(),
-      type: schedule.type,
-      status: 'success'
+  } catch (error) {
+    console.error('Error executing schedule:', error);
+    throw error;
+  }
+}
+
+/**
+ * Sync schedule from Firestore to Realtime Database when created
+ * This ensures your Arduino can also see schedules
+ */
+exports.syncScheduleToRTDB = onDocumentCreated({
+  document: 'households/{householdUid}/devices/{deviceId}/schedules/{scheduleId}',
+  region: 'asia-southeast1'
+}, async (event) => {
+  try {
+    const scheduleData = event.data.data();
+    const { householdUid, deviceId, scheduleId } = event.params;
+    
+    // Also store in Realtime Database for Arduino access
+    await db.ref(`schedules/${householdUid}/${deviceId}/${scheduleId}`).set({
+      ...scheduleData,
+      createdAt: new Date().toISOString()
     });
+    
+    console.log(`✅ Synced schedule ${scheduleId} to Realtime Database`);
     
   } catch (error) {
-    console.error(`Error executing schedule ${scheduleId}:`, error);
-    
-    // Log error
-    await db.ref('schedule_logs').push({
-      scheduleId,
-      scheduleName: schedule.name,
-      executedAt: new Date().toISOString(),
-      type: schedule.type,
-      status: 'error',
-      error: error.message
-    });
+    console.error('Error syncing schedule:', error);
   }
-}
+});
 
 /**
- * Control Arduino device
+ * Monitor device status changes in Realtime Database
+ * Log them to Firestore for history
  */
-async function controlDevice(deviceId, action) {
-  console.log(`🔧 Controlling device ${deviceId}: ${action}`);
-  
-  // Update device status in Realtime Database
-  await db.ref(`devices/${deviceId}`).update({
-    status: action,
-    lastUpdated: new Date().toISOString()
-  });
-  
-  // Send commands to Arduino
-  await db.ref(`device_commands/${deviceId}`).push({
-    command: action,
-    timestamp: Date.now(),
-    status: 'pending'
-  });
-}
-
-/**
- * Send notification
- */
-async function sendNotification(title, message) {
-  console.log(`📢 Notification: ${title} - ${message}`);
-  
-  // Store notification in Realtime Database
-  await db.ref('notifications').push({
-    title,
-    message,
-    timestamp: new Date().toISOString(),
-    read: false
-  });
-}
-
-/**
- * Clean up old data
- */
-async function cleanupData() {
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  
-  // Clean up old logs
-  const logsRef = db.ref('schedule_logs');
-  const logsSnapshot = await logsRef.once('value');
-  
-  if (logsSnapshot.exists()) {
-    const updates = {};
-    logsSnapshot.forEach((childSnapshot) => {
-      const log = childSnapshot.val();
-      const logDate = new Date(log.executedAt);
-      
-      if (logDate < sevenDaysAgo) {
-        updates[childSnapshot.key] = null; // Mark for deletion
-      }
-    });
+exports.logDeviceStatusChange = onRequest({
+  region: 'asia-southeast1'
+}, async (request, response) => {
+  try {
+    response.set('Access-Control-Allow-Origin', '*');
     
-    await logsRef.update(updates);
-    console.log('🧹 Cleaned up old schedule logs');
+    if (request.method === 'OPTIONS') {
+      response.set('Access-Control-Allow-Methods', 'POST');
+      response.set('Access-Control-Allow-Headers', 'Content-Type');
+      response.status(204).send('');
+      return;
+    }
+    
+    const { householdUid, deviceId, status, door } = request.body;
+    
+    if (!householdUid || !deviceId) {
+      response.status(400).json({ error: 'householdUid and deviceId are required' });
+      return;
+    }
+    
+    // Log to Firestore
+    await firestore
+      .collection('households')
+      .doc(householdUid)
+      .collection('devices')
+      .doc(deviceId)
+      .collection('status_logs')
+      .add({
+        status,
+        door: door || null,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        source: 'realtime-db'
+      });
+    
+    response.json({ success: true, message: 'Status logged' });
+    
+  } catch (error) {
+    console.error('Error logging status:', error);
+    response.status(500).json({ error: error.message });
   }
-}
+});
 
 // ============================================================================
 // ARDUINO DEVICE FUNCTIONS (Realtime Database)
@@ -181,13 +214,12 @@ async function cleanupData() {
 /**
  * Arduino devices can send sensor data to this endpoint
  * POST https://asia-southeast1-smahorz-fyp.cloudfunctions.net/arduinoData
- * Body: {"deviceId": "arduino1", "temperature": 25.5, "humidity": 60}
+ * Body: {"householdUid": "xxx", "deviceId": "arduino1", "temperature": 25.5, "humidity": 60}
  */
 exports.arduinoData = onRequest({
   region: 'asia-southeast1'
 }, async (request, response) => {
   try {
-    // Enable CORS
     response.set('Access-Control-Allow-Origin', '*');
     
     if (request.method === 'OPTIONS') {
@@ -202,10 +234,10 @@ exports.arduinoData = onRequest({
       return;
     }
     
-    const { deviceId, temperature, humidity, light, soilMoisture, status } = request.body;
+    const { householdUid, deviceId, temperature, humidity, light, soilMoisture, status } = request.body;
     
-    if (!deviceId) {
-      response.status(400).json({ error: 'deviceId is required' });
+    if (!householdUid || !deviceId) {
+      response.status(400).json({ error: 'householdUid and deviceId are required' });
       return;
     }
     
@@ -221,14 +253,11 @@ exports.arduinoData = onRequest({
       receivedAt: new Date().toISOString()
     };
     
-    await db.ref(`sensor_data/${deviceId}`).push(sensorData);
+    await db.ref(`sensor_data/${householdUid}/${deviceId}`).push(sensorData);
     
-    // Update device status
-    await db.ref(`devices/${deviceId}`).update({
-      lastSeen: new Date().toISOString(),
-      lastData: sensorData,
-      status: 'online'
-    });
+    // Update device status in Realtime Database
+    await db.ref(`${householdUid}/${deviceId}/lastSeen`).set(new Date().toISOString());
+    await db.ref(`${householdUid}/${deviceId}/lastData`).set(sensorData);
     
     response.json({
       success: true,
@@ -243,8 +272,8 @@ exports.arduinoData = onRequest({
 });
 
 /**
- * Arduino devices can check for commands from this endpoint
- * GET https://asia-southeast1-smahorz-fyp.cloudfunctions.net/arduinoCommands?deviceId=arduino1
+ * Arduino devices can check for pending commands
+ * GET https://asia-southeast1-smahorz-fyp.cloudfunctions.net/arduinoCommands?householdUid=xxx&deviceId=arduino1
  */
 exports.arduinoCommands = onRequest({
   region: 'asia-southeast1'
@@ -252,41 +281,25 @@ exports.arduinoCommands = onRequest({
   try {
     response.set('Access-Control-Allow-Origin', '*');
     
-    const { deviceId } = request.query;
+    const { householdUid, deviceId } = request.query;
     
-    if (!deviceId) {
-      response.status(400).json({ error: 'deviceId query parameter is required' });
+    if (!householdUid || !deviceId) {
+      response.status(400).json({ error: 'householdUid and deviceId query parameters are required' });
       return;
     }
     
-    // Get pending commands for this device
-    const commandsRef = db.ref(`device_commands/${deviceId}`);
-    const snapshot = await commandsRef.orderByChild('status').equalTo('pending').once('value');
-    
-    const commands = [];
-    const updates = {};
-    
-    snapshot.forEach((childSnapshot) => {
-      const command = childSnapshot.val();
-      commands.push({
-        id: childSnapshot.key,
-        ...command
-      });
-      
-      // Mark command as delivered
-      updates[`${childSnapshot.key}/status`] = 'delivered';
-      updates[`${childSnapshot.key}/deliveredAt`] = Date.now();
-    });
-    
-    // Update commands status
-    if (Object.keys(updates).length > 0) {
-      await commandsRef.update(updates);
-    }
+    // Get current device status from Realtime Database
+    const deviceSnapshot = await db.ref(`${householdUid}/${deviceId}`).once('value');
+    const deviceData = deviceSnapshot.val() || {};
     
     response.json({
       success: true,
+      householdUid,
       deviceId,
-      commands,
+      status: deviceData.status || null,
+      insideStatus: deviceData.insideStatus || null,
+      outsideStatus: deviceData.outsideStatus || null,
+      lastSeen: deviceData.lastSeen || null,
       timestamp: Date.now()
     });
     
@@ -297,162 +310,40 @@ exports.arduinoCommands = onRequest({
 });
 
 /**
- * Your Flutter app can call this to send commands to Arduino
- * POST https://asia-southeast1-smahorz-fyp.cloudfunctions.net/sendCommand
- * Body: {"deviceId": "arduino1", "command": "turn_on", "parameters": {}}
+ * Get upcoming schedules for a device
+ * GET https://asia-southeast1-smahorz-fyp.cloudfunctions.net/getUpcomingSchedules?householdUid=xxx&deviceId=yyy
  */
-exports.sendCommand = onRequest({
+exports.getUpcomingSchedules = onRequest({
   region: 'asia-southeast1'
 }, async (request, response) => {
   try {
     response.set('Access-Control-Allow-Origin', '*');
     
-    if (request.method === 'OPTIONS') {
-      response.set('Access-Control-Allow-Methods', 'POST');
-      response.set('Access-Control-Allow-Headers', 'Content-Type');
-      response.status(204).send('');
+    const { householdUid, deviceId } = request.query;
+    
+    if (!householdUid || !deviceId) {
+      response.status(400).json({ error: 'householdUid and deviceId are required' });
       return;
     }
     
-    if (request.method !== 'POST') {
-      response.status(405).json({ error: 'Only POST method allowed' });
-      return;
-    }
+    const today = new Date();
+    const dateKey = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
     
-    const { deviceId, command, parameters } = request.body;
+    const schedulesSnapshot = await firestore
+      .collection('households')
+      .doc(householdUid)
+      .collection('devices')
+      .doc(deviceId)
+      .collection('schedules')
+      .where('date', '==', dateKey)
+      .where('executed', '==', false)
+      .orderBy('time')
+      .get();
     
-    if (!deviceId || !command) {
-      response.status(400).json({ error: 'deviceId and command are required' });
-      return;
-    }
-    
-    // Create command in Realtime Database
-    const commandRef = await db.ref(`device_commands/${deviceId}`).push({
-      command,
-      parameters: parameters || {},
-      status: 'pending',
-      createdAt: Date.now(),
-      createdBy: 'app'
-    });
-    
-    response.json({
-      success: true,
-      message: 'Command sent to device',
-      commandId: commandRef.key,
-      deviceId,
-      command
-    });
-    
-  } catch (error) {
-    console.error('Error sending command:', error);
-    response.status(500).json({ error: error.message });
-  }
-});
-
-// ============================================================================
-// SCHEDULE MANAGEMENT FUNCTIONS
-// ============================================================================
-
-/**
- * Create a new schedule from your Flutter app
- * POST https://asia-southeast1-smahorz-fyp.cloudfunctions.net/createSchedule
- * Body: {
- *   "name": "Morning Light On",
- *   "time": "07:00",
- *   "type": "device_control",
- *   "deviceId": "arduino1",
- *   "action": "turn_on",
- *   "enabled": true
- * }
- */
-exports.createSchedule = onRequest({
-  region: 'asia-southeast1'
-}, async (request, response) => {
-  try {
-    response.set('Access-Control-Allow-Origin', '*');
-    
-    if (request.method === 'OPTIONS') {
-      response.set('Access-Control-Allow-Methods', 'POST');
-      response.set('Access-Control-Allow-Headers', 'Content-Type');
-      response.status(204).send('');
-      return;
-    }
-    
-    if (request.method !== 'POST') {
-      response.status(405).json({ error: 'Only POST method allowed' });
-      return;
-    }
-    
-    const { name, time, type, deviceId, action, title, message, enabled = true } = request.body;
-    
-    if (!name || !time || !type) {
-      response.status(400).json({ error: 'name, time, and type are required' });
-      return;
-    }
-    
-    // Validate time format (HH:MM)
-    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    if (!timeRegex.test(time)) {
-      response.status(400).json({ error: 'Invalid time format. Use HH:MM' });
-      return;
-    }
-    
-    // Create schedule in Realtime Database
-    const scheduleData = {
-      name,
-      time,
-      type,
-      enabled,
-      createdAt: new Date().toISOString(),
-      createdBy: 'user'
-    };
-    
-    // Add type-specific fields
-    if (type === 'device_control') {
-      scheduleData.deviceId = deviceId || null;
-      scheduleData.action = action || null;
-    } else if (type === 'notification') {
-      scheduleData.title = title || null;
-      scheduleData.message = message || null;
-    }
-    
-    const scheduleRef = await db.ref('schedules').push(scheduleData);
-    
-    response.json({
-      success: true,
-      message: 'Schedule created successfully',
-      scheduleId: scheduleRef.key,
-      schedule: scheduleData
-    });
-    
-  } catch (error) {
-    console.error('Error creating schedule:', error);
-    response.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * Get all schedules
- * GET https://asia-southeast1-smahorz-fyp.cloudfunctions.net/getSchedules
- */
-exports.getSchedules = onRequest({
-  region: 'asia-southeast1'
-}, async (request, response) => {
-  try {
-    response.set('Access-Control-Allow-Origin', '*');
-    
-    const schedulesRef = db.ref('schedules');
-    const snapshot = await schedulesRef.once('value');
-    
-    const schedules = [];
-    if (snapshot.exists()) {
-      snapshot.forEach((childSnapshot) => {
-        schedules.push({
-          id: childSnapshot.key,
-          ...childSnapshot.val()
-        });
-      });
-    }
+    const schedules = schedulesSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
     
     response.json({
       success: true,
@@ -467,101 +358,8 @@ exports.getSchedules = onRequest({
 });
 
 /**
- * Update a schedule
- * PUT https://asia-southeast1-smahorz-fyp.cloudfunctions.net/updateSchedule
- * Body: {"scheduleId": "abc123", "updates": {"enabled": false}}
- */
-exports.updateSchedule = onRequest({
-  region: 'asia-southeast1'
-}, async (request, response) => {
-  try {
-    response.set('Access-Control-Allow-Origin', '*');
-    
-    if (request.method === 'OPTIONS') {
-      response.set('Access-Control-Allow-Methods', 'POST, PUT');
-      response.set('Access-Control-Allow-Headers', 'Content-Type');
-      response.status(204).send('');
-      return;
-    }
-    
-    if (request.method !== 'POST' && request.method !== 'PUT') {
-      response.status(405).json({ error: 'Only POST/PUT methods allowed' });
-      return;
-    }
-    
-    const { scheduleId, updates } = request.body;
-    
-    if (!scheduleId || !updates) {
-      response.status(400).json({ error: 'scheduleId and updates are required' });
-      return;
-    }
-    
-    // Update schedule
-    await db.ref(`schedules/${scheduleId}`).update({
-      ...updates,
-      updatedAt: new Date().toISOString()
-    });
-    
-    response.json({
-      success: true,
-      message: 'Schedule updated successfully',
-      scheduleId
-    });
-    
-  } catch (error) {
-    console.error('Error updating schedule:', error);
-    response.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * Delete a schedule
- * DELETE https://asia-southeast1-smahorz-fyp.cloudfunctions.net/deleteSchedule
- * Body: {"scheduleId": "abc123"}
- */
-exports.deleteSchedule = onRequest({
-  region: 'asia-southeast1'
-}, async (request, response) => {
-  try {
-    response.set('Access-Control-Allow-Origin', '*');
-    
-    if (request.method === 'OPTIONS') {
-      response.set('Access-Control-Allow-Methods', 'POST, DELETE');
-      response.set('Access-Control-Allow-Headers', 'Content-Type');
-      response.status(204).send('');
-      return;
-    }
-    
-    if (request.method !== 'POST' && request.method !== 'DELETE') {
-      response.status(405).json({ error: 'Only POST/DELETE methods allowed' });
-      return;
-    }
-    
-    const { scheduleId } = request.body;
-    
-    if (!scheduleId) {
-      response.status(400).json({ error: 'scheduleId is required' });
-      return;
-    }
-    
-    // Delete schedule
-    await db.ref(`schedules/${scheduleId}`).remove();
-    
-    response.json({
-      success: true,
-      message: 'Schedule deleted successfully',
-      scheduleId
-    });
-    
-  } catch (error) {
-    console.error('Error deleting schedule:', error);
-    response.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * Get schedule logs
- * GET https://asia-southeast1-smahorz-fyp.cloudfunctions.net/getScheduleLogs?limit=50
+ * Get schedule execution logs
+ * GET https://asia-southeast1-smahorz-fyp.cloudfunctions.net/getScheduleLogs?householdUid=xxx&limit=50
  */
 exports.getScheduleLogs = onRequest({
   region: 'asia-southeast1'
@@ -569,23 +367,26 @@ exports.getScheduleLogs = onRequest({
   try {
     response.set('Access-Control-Allow-Origin', '*');
     
-    const limit = parseInt(request.query.limit) || 50;
+    const { householdUid, limit = '50' } = request.query;
     
-    const logsRef = db.ref('schedule_logs');
-    const snapshot = await logsRef.orderByChild('executedAt').limitToLast(limit).once('value');
-    
-    const logs = [];
-    if (snapshot.exists()) {
-      snapshot.forEach((childSnapshot) => {
-        logs.push({
-          id: childSnapshot.key,
-          ...childSnapshot.val()
-        });
-      });
+    if (!householdUid) {
+      response.status(400).json({ error: 'householdUid is required' });
+      return;
     }
     
-    // Reverse to show newest first
-    logs.reverse();
+    const logsSnapshot = await firestore
+      .collection('households')
+      .doc(householdUid)
+      .collection('schedule_logs')
+      .orderBy('executedAt', 'desc')
+      .limit(parseInt(limit))
+      .get();
+    
+    const logs = logsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      executedAt: doc.data().executedAt?.toDate().toISOString()
+    }));
     
     response.json({
       success: true,
@@ -594,7 +395,7 @@ exports.getScheduleLogs = onRequest({
     });
     
   } catch (error) {
-    console.error('Error getting schedule logs:', error);
+    console.error('Error getting logs:', error);
     response.status(500).json({ error: error.message });
   }
 });
