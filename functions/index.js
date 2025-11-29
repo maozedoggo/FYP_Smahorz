@@ -8,7 +8,7 @@ admin.initializeApp();
 const db = admin.database();
 
 // ============================================================================
-// SIMPLE SCHEDULE SYSTEM - Everything in Realtime Database
+// SCHEDULE EXECUTION SYSTEM - Reads from Realtime Database
 // ============================================================================
 
 /**
@@ -22,7 +22,7 @@ exports.checkSchedules = onSchedule({
   memory: '256MiB'
 }, async (event) => {
   try {
-    console.log('🔔 Checking scheduled tasks...');
+    console.log('🔔 Checking scheduled tasks from Realtime Database...');
     
     // Get current time in Malaysia timezone
     const now = new Date();
@@ -37,25 +37,37 @@ exports.checkSchedules = onSchedule({
     const day = malaysiaTime.getDate().toString().padStart(2, '0');
     const currentDate = `${year}-${month}-${day}`;
     
-    console.log(`Current time: ${currentTime}, Current date: ${currentDate}`);
+    console.log(`⏰ Current time: ${currentTime}, Current date: ${currentDate}`);
     
-    // Get all households
+    // Get all households from Realtime Database
     const householdsSnapshot = await db.ref('/').once('value');
     const households = householdsSnapshot.val() || {};
     
+    console.log(`🏠 Found ${Object.keys(households).length} households to check`);
+    
     let totalExecuted = 0;
+    let totalChecked = 0;
     
     for (const [householdUid, householdData] of Object.entries(households)) {
       // Skip if not a household (could be other data)
-      if (typeof householdData !== 'object') continue;
+      if (typeof householdData !== 'object' || householdUid.startsWith('_')) {
+        continue;
+      }
+      
+      console.log(`🔍 Checking household: ${householdUid}`);
       
       for (const [deviceId, deviceData] of Object.entries(householdData)) {
-        // Skip if device has no schedules
-        if (!deviceData.schedules) continue;
+        // Skip if device has no schedules or is not a device object
+        if (typeof deviceData !== 'object' || !deviceData.schedules) {
+          continue;
+        }
         
         const schedules = deviceData.schedules;
+        console.log(`📱 Checking device: ${deviceId}, Schedules: ${Object.keys(schedules).length}`);
         
         for (const [scheduleId, schedule] of Object.entries(schedules)) {
+          totalChecked++;
+          
           // Check if schedule matches current time and date and not executed
           if (schedule.time === currentTime && 
               schedule.date === currentDate && 
@@ -73,18 +85,23 @@ exports.checkSchedules = onSchedule({
                 const status = schedule.action === 'Unlock';
                 
                 await db.ref(`${devicePath}/${doorPath}`).set(status);
-                console.log(`✅ Updated ${devicePath}/${doorPath} = ${status}`);
+                console.log(`✅ Updated ${devicePath}/${doorPath} = ${status} (${schedule.action})`);
               } else {
                 // Clothes Hanger - simple status
                 const status = schedule.action === 'Extend';
                 
                 await db.ref(`${devicePath}/status`).set(status);
-                console.log(`✅ Updated ${devicePath}/status = ${status}`);
+                console.log(`✅ Updated ${devicePath}/status = ${status} (${schedule.action})`);
               }
               
               // Mark schedule as executed
-              await db.ref(`${devicePath}/schedules/${scheduleId}/executed`).set(true);
-              await db.ref(`${devicePath}/schedules/${scheduleId}/executedAt`).set(new Date().toISOString());
+              const executedTime = new Date().toISOString();
+              await db.ref(`${devicePath}/schedules/${scheduleId}`).update({
+                executed: true,
+                executedAt: executedTime
+              });
+              
+              console.log(`✅ Marked schedule ${scheduleId} as executed`);
               
               totalExecuted++;
               
@@ -96,7 +113,11 @@ exports.checkSchedules = onSchedule({
       }
     }
     
-    console.log(`✅ Executed ${totalExecuted} schedules`);
+    console.log(`📊 Checked ${totalChecked} schedules, Executed ${totalExecuted} schedules`);
+    
+    if (totalExecuted === 0) {
+      console.log('ℹ️ No schedules to execute at this time');
+    }
     
   } catch (error) {
     console.error('❌ Error in schedule check:', error);

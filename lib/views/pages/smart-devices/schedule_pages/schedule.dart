@@ -52,47 +52,50 @@ class _SchedulePageState extends State<SchedulePage> {
   Future<void> _loadSchedulesForDay(DateTime day) async {
     try {
       final dateKey = DateFormat('yyyy-MM-dd').format(day);
+      final devicePath = '${widget.householdUid}/${widget.deviceId}';
 
-      print('📅 Loading schedules from Firestore for: $dateKey');
-      print('📁 Path: ${widget.householdUid}/${widget.deviceId}/schedules');
+      print('📅 Loading schedules from Realtime DB for: $dateKey');
+      print('📁 Path: $devicePath/schedules');
 
-      // Load from Firestore
-      final querySnapshot = await _firestore
-          .collection(widget.householdUid)
-          .doc(widget.deviceId)
-          .collection('schedules')
-          .where('date', isEqualTo: dateKey)
-          .get();
+      // Load from Realtime Database
+      final snapshot = await _realtimeDB.child('$devicePath/schedules').once();
 
       final schedules = <Map<String, dynamic>>[];
 
-      print('📦 Firestore documents found: ${querySnapshot.docs.length}');
+      if (snapshot.snapshot.value != null) {
+        final data = snapshot.snapshot.value as Map<dynamic, dynamic>;
 
-      for (final doc in querySnapshot.docs) {
-        final data = doc.data();
-        print('✅ Found schedule: ${doc.id} -> $data');
-        schedules.add({
-          'id': doc.id,
-          'time': data['time'] ?? '',
-          'action': data['action'] ?? '',
-          'door': data['door'] ?? '',
-          'date': data['date'] ?? '',
-          'executed': data['executed'] ?? false,
-          'executedAt': data['executedAt'],
+        print('📦 Raw schedule data: $data');
+
+        data.forEach((key, value) {
+          if (value is Map && value['date'] == dateKey) {
+            print('✅ Found matching schedule: $key -> $value');
+            schedules.add({
+              'id': key.toString(),
+              'time': value['time']?.toString() ?? '',
+              'action': value['action']?.toString() ?? '',
+              'door': value['door']?.toString() ?? '',
+              'date': value['date']?.toString() ?? '',
+              'executed': value['executed'] == true,
+              'executedAt': value['executedAt'],
+            });
+          }
         });
+
+        // Sort by time
+        schedules.sort((a, b) => a['time'].compareTo(b['time']));
+      } else {
+        print('⚠️ No schedule data found at path: $devicePath/schedules');
       }
 
-      // Sort by time
-      schedules.sort((a, b) => a['time'].compareTo(b['time']));
-
-      print('📋 Total schedules loaded from Firestore: ${schedules.length}');
+      print('📋 Total schedules loaded: ${schedules.length}');
 
       setState(() {
         _schedules = schedules;
         _loading = false;
       });
     } catch (e) {
-      print('❌ Error loading schedules from Firestore: $e');
+      print('❌ Error loading schedules: $e');
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -114,7 +117,7 @@ class _SchedulePageState extends State<SchedulePage> {
       'date': DateFormat('yyyy-MM-dd').format(selectedDay),
       'action': action,
       'executed': false,
-      'createdAt': FieldValue.serverTimestamp(),
+      'createdAt': DateTime.now().toIso8601String(),
     };
 
     // Add door for parcel box
@@ -122,25 +125,30 @@ class _SchedulePageState extends State<SchedulePage> {
       scheduleData['door'] = door;
     }
 
-    print('➕ Adding schedule to Firestore: $scheduleData');
-    print('📁 Path: ${widget.householdUid}/${widget.deviceId}/schedules');
+    print('➕ Adding schedule to Realtime DB: $scheduleData');
 
     try {
-      // Save to Firestore
-      final docRef = await _firestore
-          .collection(widget.householdUid)
-          .doc(widget.deviceId)
-          .collection('schedules')
-          .add(scheduleData);
+      // PRIMARY: Save to Realtime Database (where Cloud Function reads)
+      final newScheduleRef = _realtimeDB.child('$devicePath/schedules').push();
+      final scheduleId = newScheduleRef.key!;
 
-      print('✅ Schedule added to Firestore with ID: ${docRef.id}');
+      await newScheduleRef.set(scheduleData);
+      print('✅ Schedule added to Realtime DB with ID: $scheduleId');
 
-      // Also save to Realtime Database (keep your existing functionality)
-      final realtimeData = Map<String, dynamic>.from(scheduleData);
-      realtimeData.remove('createdAt'); // Remove Firestore-specific field
-
-      print('💾 Also saving to Realtime Database: $devicePath/schedules');
-      await _realtimeDB.child('$devicePath/schedules').push().set(realtimeData);
+      // SECONDARY: Optional backup to Firestore
+      try {
+        await _firestore
+            .collection('households')
+            .doc(widget.householdUid)
+            .collection('devices')
+            .doc(widget.deviceId)
+            .collection('schedules')
+            .doc(scheduleId) // Use same ID for consistency
+            .set(scheduleData);
+        print('✅ Backup saved to Firestore');
+      } catch (firestoreError) {
+        print('⚠️ Firestore backup failed (non-critical): $firestoreError');
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -162,23 +170,27 @@ class _SchedulePageState extends State<SchedulePage> {
   Future<void> _deleteSchedule(String id) async {
     final devicePath = '${widget.householdUid}/${widget.deviceId}';
 
-    print('🗑️ Deleting schedule from Firestore: $id');
+    print('🗑️ Deleting schedule from Realtime DB: $id');
 
     try {
-      // Delete from Firestore
-      await _firestore
-          .collection(widget.householdUid)
-          .doc(widget.deviceId)
-          .collection('schedules')
-          .doc(id)
-          .delete();
+      // Delete from Realtime Database
+      await _realtimeDB.child('$devicePath/schedules/$id').remove();
+      print('✅ Schedule deleted from Realtime DB');
 
-      print('✅ Schedule deleted from Firestore');
-
-      // Also delete from Realtime Database (optional - keep if you want sync)
-      // Note: This might be tricky without knowing the Realtime DB key
-      // You may need to store a mapping or search for matching schedules
-      print('💡 Note: Schedule might still exist in Realtime Database');
+      // Also delete from Firestore backup
+      try {
+        await _firestore
+            .collection('households')
+            .doc(widget.householdUid)
+            .collection('devices')
+            .doc(widget.deviceId)
+            .collection('schedules')
+            .doc(id)
+            .delete();
+        print('✅ Also deleted from Firestore backup');
+      } catch (firestoreError) {
+        print('⚠️ Firestore delete failed (non-critical): $firestoreError');
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(
@@ -197,7 +209,6 @@ class _SchedulePageState extends State<SchedulePage> {
     }
   }
 
-  // Manual trigger for testing
   Future<void> _triggerScheduleNow(
     String scheduleId,
     String action, {
@@ -208,7 +219,7 @@ class _SchedulePageState extends State<SchedulePage> {
 
       print('▶️ Triggering schedule: $scheduleId with action: $action');
 
-      // Update device status in Realtime Database (keep this as is)
+      // Update device status in Realtime Database
       if (widget.deviceType.toLowerCase().contains('parcel')) {
         final doorPath = door == 'Inside' ? 'insideStatus' : 'outsideStatus';
         final status = action == 'Unlock';
@@ -222,19 +233,29 @@ class _SchedulePageState extends State<SchedulePage> {
         await _realtimeDB.child('$devicePath/status').set(status);
       }
 
-      // Mark as executed in Firestore
+      // Mark as executed in Realtime Database
       final executedTime = DateTime.now().toIso8601String();
-      print('✅ Marking schedule as executed in Firestore at: $executedTime');
+      print('✅ Marking schedule as executed at: $executedTime');
 
-      await _firestore
-          .collection(widget.householdUid)
-          .doc(widget.deviceId)
-          .collection('schedules')
-          .doc(scheduleId)
-          .update({'executed': true, 'executedAt': executedTime});
+      await _realtimeDB.child('$devicePath/schedules/$scheduleId').update({
+        'executed': true,
+        'executedAt': executedTime,
+      });
 
-      // Also update in Realtime Database if needed
-      print('💾 Also updating executed status in Realtime Database');
+      // Also update in Firestore backup
+      try {
+        await _firestore
+            .collection('households')
+            .doc(widget.householdUid)
+            .collection('devices')
+            .doc(widget.deviceId)
+            .collection('schedules')
+            .doc(scheduleId)
+            .update({'executed': true, 'executedAt': executedTime});
+        print('✅ Also updated Firestore backup');
+      } catch (firestoreError) {
+        print('⚠️ Firestore update failed (non-critical): $firestoreError');
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
