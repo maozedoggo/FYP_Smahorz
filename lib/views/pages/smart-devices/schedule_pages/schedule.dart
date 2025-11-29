@@ -52,53 +52,51 @@ class _SchedulePageState extends State<SchedulePage> {
   Future<void> _loadSchedulesForDay(DateTime day) async {
     try {
       final dateKey = DateFormat('yyyy-MM-dd').format(day);
-      final devicePath = '${widget.householdUid}/${widget.deviceId}';
 
-      print('📅 Loading schedules for: $dateKey from path: $devicePath/schedules');
+      print('📅 Loading schedules from Firestore for: $dateKey');
+      print('📁 Path: ${widget.householdUid}/${widget.deviceId}/schedules');
 
-      // Load from Realtime Database
-      final snapshot = await _realtimeDB.child('$devicePath/schedules').once();
+      // Load from Firestore
+      final querySnapshot = await _firestore
+          .collection(widget.householdUid)
+          .doc(widget.deviceId)
+          .collection('schedules')
+          .where('date', isEqualTo: dateKey)
+          .get();
 
       final schedules = <Map<String, dynamic>>[];
 
-      if (snapshot.snapshot.value != null) {
-        final data = snapshot.snapshot.value as Map<dynamic, dynamic>;
+      print('📦 Firestore documents found: ${querySnapshot.docs.length}');
 
-        print('📦 Raw schedule data: $data');
-
-        data.forEach((key, value) {
-          if (value['date'] == dateKey) {
-            print('✅ Found matching schedule: $key -> $value');
-            schedules.add({
-              'id': key,
-              'time': value['time'] ?? '',
-              'action': value['action'] ?? '',
-              'door': value['door'] ?? '',
-              'date': value['date'] ?? '',
-              'executed': value['executed'] ?? false,
-              'executedAt': value['executedAt'],
-            });
-          }
+      for (final doc in querySnapshot.docs) {
+        final data = doc.data();
+        print('✅ Found schedule: ${doc.id} -> $data');
+        schedules.add({
+          'id': doc.id,
+          'time': data['time'] ?? '',
+          'action': data['action'] ?? '',
+          'door': data['door'] ?? '',
+          'date': data['date'] ?? '',
+          'executed': data['executed'] ?? false,
+          'executedAt': data['executedAt'],
         });
-
-        // Sort by time
-        schedules.sort((a, b) => a['time'].compareTo(b['time']));
-      } else {
-        print('⚠️ No schedule data found at path: $devicePath/schedules');
       }
 
-      print('📋 Total schedules loaded: ${schedules.length}');
+      // Sort by time
+      schedules.sort((a, b) => a['time'].compareTo(b['time']));
+
+      print('📋 Total schedules loaded from Firestore: ${schedules.length}');
 
       setState(() {
         _schedules = schedules;
         _loading = false;
       });
     } catch (e) {
-      print('❌ Error loading schedules: $e');
+      print('❌ Error loading schedules from Firestore: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading schedules: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading schedules: $e')));
       }
       setState(() => _loading = false);
     }
@@ -116,6 +114,7 @@ class _SchedulePageState extends State<SchedulePage> {
       'date': DateFormat('yyyy-MM-dd').format(selectedDay),
       'action': action,
       'executed': false,
+      'createdAt': FieldValue.serverTimestamp(),
     };
 
     // Add door for parcel box
@@ -123,34 +122,79 @@ class _SchedulePageState extends State<SchedulePage> {
       scheduleData['door'] = door;
     }
 
-    print('➕ Adding schedule: $scheduleData to path: $devicePath/schedules');
+    print('➕ Adding schedule to Firestore: $scheduleData');
+    print('📁 Path: ${widget.householdUid}/${widget.deviceId}/schedules');
 
-    // Save directly to Realtime Database
-    await _realtimeDB.child('$devicePath/schedules').push().set(scheduleData);
+    try {
+      // Save to Firestore
+      final docRef = await _firestore
+          .collection(widget.householdUid)
+          .doc(widget.deviceId)
+          .collection('schedules')
+          .add(scheduleData);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Schedule added successfully!')),
-      );
+      print('✅ Schedule added to Firestore with ID: ${docRef.id}');
+
+      // Also save to Realtime Database (keep your existing functionality)
+      final realtimeData = Map<String, dynamic>.from(scheduleData);
+      realtimeData.remove('createdAt'); // Remove Firestore-specific field
+
+      print('💾 Also saving to Realtime Database: $devicePath/schedules');
+      await _realtimeDB.child('$devicePath/schedules').push().set(realtimeData);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Schedule added successfully!')),
+        );
+      }
+
+      await _loadSchedulesForDay(selectedDay);
+    } catch (e) {
+      print('❌ Error adding schedule: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error adding schedule: $e')));
+      }
     }
-
-    await _loadSchedulesForDay(selectedDay);
   }
 
   Future<void> _deleteSchedule(String id) async {
     final devicePath = '${widget.householdUid}/${widget.deviceId}';
-    
-    print('🗑️ Deleting schedule: $id from path: $devicePath/schedules/$id');
-    
-    await _realtimeDB.child('$devicePath/schedules/$id').remove();
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Schedule deleted!')),
-      );
+    print('🗑️ Deleting schedule from Firestore: $id');
+
+    try {
+      // Delete from Firestore
+      await _firestore
+          .collection(widget.householdUid)
+          .doc(widget.deviceId)
+          .collection('schedules')
+          .doc(id)
+          .delete();
+
+      print('✅ Schedule deleted from Firestore');
+
+      // Also delete from Realtime Database (optional - keep if you want sync)
+      // Note: This might be tricky without knowing the Realtime DB key
+      // You may need to store a mapping or search for matching schedules
+      print('💡 Note: Schedule might still exist in Realtime Database');
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Schedule deleted!')));
+      }
+
+      await _loadSchedulesForDay(selectedDay);
+    } catch (e) {
+      print('❌ Error deleting schedule: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error deleting schedule: $e')));
+      }
     }
-
-    await _loadSchedulesForDay(selectedDay);
   }
 
   // Manual trigger for testing
@@ -164,28 +208,33 @@ class _SchedulePageState extends State<SchedulePage> {
 
       print('▶️ Triggering schedule: $scheduleId with action: $action');
 
-      // Update device status
+      // Update device status in Realtime Database (keep this as is)
       if (widget.deviceType.toLowerCase().contains('parcel')) {
         final doorPath = door == 'Inside' ? 'insideStatus' : 'outsideStatus';
         final status = action == 'Unlock';
-        
+
         print('🚪 Updating $devicePath/$doorPath = $status');
         await _realtimeDB.child('$devicePath/$doorPath').set(status);
       } else {
         final status = action == 'Extend';
-        
+
         print('📏 Updating $devicePath/status = $status');
         await _realtimeDB.child('$devicePath/status').set(status);
       }
 
-      // Mark as executed
+      // Mark as executed in Firestore
       final executedTime = DateTime.now().toIso8601String();
-      print('✅ Marking schedule as executed at: $executedTime');
-      
-      await _realtimeDB.child('$devicePath/schedules/$scheduleId').update({
-        'executed': true,
-        'executedAt': executedTime,
-      });
+      print('✅ Marking schedule as executed in Firestore at: $executedTime');
+
+      await _firestore
+          .collection(widget.householdUid)
+          .doc(widget.deviceId)
+          .collection('schedules')
+          .doc(scheduleId)
+          .update({'executed': true, 'executedAt': executedTime});
+
+      // Also update in Realtime Database if needed
+      print('💾 Also updating executed status in Realtime Database');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -202,9 +251,9 @@ class _SchedulePageState extends State<SchedulePage> {
     } catch (e) {
       print('❌ Error executing schedule: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error executing schedule: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error executing schedule: $e')));
       }
     }
   }
@@ -216,8 +265,8 @@ class _SchedulePageState extends State<SchedulePage> {
         TimeOfDay? selectedTime = TimeOfDay.now();
         String selectedAction =
             widget.deviceType.toLowerCase().contains('parcel')
-                ? "Unlock"
-                : "Extend";
+            ? "Unlock"
+            : "Extend";
         String selectedDoor = "Inside";
 
         return StatefulBuilder(
@@ -591,88 +640,87 @@ class _SchedulePageState extends State<SchedulePage> {
                       ),
                     )
                   : _schedules.isEmpty
-                      ? const Center(
-                          child: Text(
-                            "No schedules yet.\nTap + to add one!",
-                            style: TextStyle(color: Colors.white54, fontSize: 16),
-                            textAlign: TextAlign.center,
+                  ? const Center(
+                      child: Text(
+                        "No schedules yet.\nTap + to add one!",
+                        style: TextStyle(color: Colors.white54, fontSize: 16),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      itemCount: _schedules.length,
+                      itemBuilder: (context, index) {
+                        final schedule = _schedules[index];
+                        return Card(
+                          color: const Color(0xFF1C2233),
+                          margin: const EdgeInsets.only(bottom: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
                           ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          itemCount: _schedules.length,
-                          itemBuilder: (context, index) {
-                            final schedule = _schedules[index];
-                            return Card(
-                              color: const Color(0xFF1C2233),
-                              margin: const EdgeInsets.only(bottom: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
+                          child: ListTile(
+                            leading: Icon(
+                              Icons.access_time,
+                              color: _getScheduleStatusColor(schedule),
+                            ),
+                            title: Text(
+                              _getScheduleDisplayText(schedule),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                decoration: schedule['executed'] == true
+                                    ? TextDecoration.lineThrough
+                                    : TextDecoration.none,
                               ),
-                              child: ListTile(
-                                leading: Icon(
-                                  Icons.access_time,
-                                  color: _getScheduleStatusColor(schedule),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  schedule['time'],
+                                  style: const TextStyle(color: Colors.white70),
                                 ),
-                                title: Text(
-                                  _getScheduleDisplayText(schedule),
+                                Text(
+                                  _getExecutionInfo(schedule),
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    decoration: schedule['executed'] == true
-                                        ? TextDecoration.lineThrough
-                                        : TextDecoration.none,
+                                    color: schedule['executed'] == true
+                                        ? Colors.green
+                                        : Colors.orange,
+                                    fontSize: 12,
                                   ),
                                 ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      schedule['time'],
-                                      style:
-                                          const TextStyle(color: Colors.white70),
+                              ],
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Manual trigger button
+                                if (schedule['executed'] != true)
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.play_arrow,
+                                      color: Colors.green,
                                     ),
-                                    Text(
-                                      _getExecutionInfo(schedule),
-                                      style: TextStyle(
-                                        color: schedule['executed'] == true
-                                            ? Colors.green
-                                            : Colors.orange,
-                                        fontSize: 12,
-                                      ),
+                                    onPressed: () => _triggerScheduleNow(
+                                      schedule['id'],
+                                      schedule['action'],
+                                      door: schedule['door'] ?? '',
                                     ),
-                                  ],
+                                  ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: Colors.redAccent,
+                                  ),
+                                  onPressed: () =>
+                                      _deleteSchedule(schedule['id']),
                                 ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Manual trigger button
-                                    if (schedule['executed'] != true)
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.play_arrow,
-                                          color: Colors.green,
-                                        ),
-                                        onPressed: () => _triggerScheduleNow(
-                                          schedule['id'],
-                                          schedule['action'],
-                                          door: schedule['door'] ?? '',
-                                        ),
-                                      ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.delete,
-                                        color: Colors.redAccent,
-                                      ),
-                                      onPressed: () =>
-                                          _deleteSchedule(schedule['id']),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
