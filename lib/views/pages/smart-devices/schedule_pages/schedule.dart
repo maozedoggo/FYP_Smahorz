@@ -668,7 +668,7 @@ class _SchedulePageState extends State<SchedulePage> {
                   : _schedules.isEmpty
                   ? const Center(
                       child: Text(
-                        "No schedules yet.\nTap + to add one!",
+                        "No schedules yet",
                         style: TextStyle(color: Colors.white54, fontSize: 16),
                         textAlign: TextAlign.center,
                       ),
