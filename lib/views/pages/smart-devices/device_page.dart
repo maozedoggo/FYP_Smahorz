@@ -27,6 +27,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   // ===========================================================================
   // STATE VARIABLES
   // ===========================================================================
+  bool _isUpdating = false; // Track if update is in progress
   dynamic _deviceStatus = false;
   String? householdUid;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -188,13 +189,18 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   // DEVICE CONTROL METHODS - FIXED
   // ===========================================================================
   void _toggleDevice() async {
-    // Only check if already controlling, don't check connection status
-    if (householdUid == null || _isControlling) {
+    // Only check if already controlling or updating
+    if (householdUid == null || _isControlling || _isUpdating) {
       return;
     }
 
+    // Store previous state before any operations
+    final previousStatus = _deviceStatus;
+
     try {
       _isControlling = true; // Prevent multiple rapid toggles
+      _isUpdating = true; // Show loading state
+      setState(() {}); // Update UI immediately to show loading
 
       final deviceType = widget.deviceType.toLowerCase();
       final newStatus = _getNewStatus();
@@ -203,19 +209,16 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       print("Device ID: ${widget.deviceId}");
       print("Device Type: ${widget.deviceType}");
       print("Household ID: $householdUid");
-      print("Device Connected: $_deviceConnected");
       print("New Status: $newStatus");
 
-      // Update local state first (but don't setState yet to avoid UI flicker)
-      final previousStatus = _deviceStatus;
-
+      // Perform the update operations and wait for them to complete
       if (deviceType.contains('parcel')) {
         await _updateParcelBoxStatus(newStatus);
       } else {
         await _updateSimpleDeviceStatus(newStatus);
       }
 
-      // Only update UI after successful operation
+      // Update local state after successful update
       setState(() {
         _deviceStatus = newStatus;
       });
@@ -223,7 +226,12 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       print("✓ DeviceControlPage successfully updated device");
     } catch (error) {
       print("✗ Error controlling device: $error");
-      // Don't revert UI - keep previous state
+
+      // Revert to previous state on error
+      setState(() {
+        _deviceStatus = previousStatus;
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Error controlling device: $error"),
@@ -232,6 +240,8 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       );
     } finally {
       _isControlling = false; // Re-enable controls
+      _isUpdating = false; // Hide loading state
+      setState(() {}); // Update UI
     }
   }
 
@@ -619,19 +629,24 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
               width: 200,
               height: 60,
               child: ElevatedButton(
-                onPressed: _isControlling
+                onPressed:
+                    (_isControlling || _isUpdating) // Disable if updating
                     ? null
-                    : _toggleDevice, // Only check if controlling, not connection status
+                    : _toggleDevice,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      _getButtonColor(), // Always use the normal button color
+                  backgroundColor: _isUpdating
+                      ? Colors
+                            .grey // Show grey when loading
+                      : _getButtonColor(),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(15),
                   ),
                   elevation: 4,
-                  shadowColor: _getButtonColor().withOpacity(0.5),
+                  shadowColor: _isUpdating
+                      ? Colors.grey.withOpacity(0.5)
+                      : _getButtonColor().withOpacity(0.5),
                 ),
-                child: _isControlling
+                child: _isUpdating
                     ? const SizedBox(
                         width: 20,
                         height: 20,

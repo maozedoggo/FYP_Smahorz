@@ -35,6 +35,7 @@ class CreateAccountState extends State<CreateAccount> {
 
   bool showPassword = false;
   bool showConfirm = false;
+  bool _isLoading = false; // Add loading state
 
   @override
   void dispose() {
@@ -81,6 +82,9 @@ class CreateAccountState extends State<CreateAccount> {
   }
 
   Future<void> _submit() async {
+    // Don't submit if already loading
+    if (_isLoading) return;
+
     final passwordError = _validatePassword(passwordController.text);
 
     if (usernameController.text.isEmpty ||
@@ -100,6 +104,11 @@ class CreateAccountState extends State<CreateAccount> {
       return;
     }
 
+    // Start loading
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
       // Check if username already exists
       final usernameQuery = await FirebaseFirestore.instance
@@ -113,6 +122,9 @@ class CreateAccountState extends State<CreateAccount> {
           'Error',
           'Username already taken, please choose another one.',
         );
+        setState(() {
+          _isLoading = false;
+        });
         return;
       }
 
@@ -148,183 +160,233 @@ class CreateAccountState extends State<CreateAccount> {
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
       if (e.code == 'email-already-in-use') {
         _showPopup('Error', 'This email is already registered.');
       } else {
         _showPopup('Error', e.message ?? 'Something went wrong');
       }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showPopup('Error', 'An unexpected error occurred. Please try again.');
     }
+  }
+
+  Widget _buildLoadingOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.7),
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              strokeWidth: 4.0,
+            ),
+            SizedBox(height: 20),
+            Text(
+              'Creating Account...',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
 
-    return Scaffold(
-      resizeToAvoidBottomInset: true, // important for keyboard
-      body: Container(
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0063a1), Color(0xFF0982BA), Color(0xFF04111C)],
-            stops: [0.21, 0.41, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const SizedBox(height: 20),
-                const Text(
-                  "CREATE ACCOUNT",
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 30),
-
-                // User info summary
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text("Name: ${widget.name}"),
-                        Text("Email: ${widget.email}"),
-                        Text("Address Line 1: ${widget.addressLine1}"),
-                        Text("Address Line 2: ${widget.addressLine2}"),
-                        Text("Postal Code: ${widget.postalCode}"),
-                        Text("State: ${widget.state}"),
-                        Text("District: ${widget.district}"),
-                      ],
+    return Stack(
+      children: [
+        Scaffold(
+          resizeToAvoidBottomInset: true,
+          body: Container(
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF0063a1), Color(0xFF0982BA), Color(0xFF04111C)],
+                stops: [0.21, 0.41, 1.0],
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 20),
+                    const Text(
+                      "CREATE ACCOUNT",
+                      style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 30),
+                    const SizedBox(height: 30),
 
-                // Username & Password fields
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Column(
-                    children: [
-                      // Username
-                      TextField(
-                        controller: usernameController,
-                        decoration: const InputDecoration(
-                          prefixIconColor: Colors.black54,
-                          prefixIcon: Icon(Icons.person),
-                          hintText: "USERNAME",
-                          border: OutlineInputBorder(),
-                        ),
+                    // User info summary
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      const SizedBox(height: 16),
-
-                      // Password instructions
-                      Align(
+                      child: Align(
                         alignment: Alignment.centerLeft,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: Text(
-                            'Password must be at least 8 characters, contain 1 uppercase, 1 lowercase, and 1 special character.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.black54,
-                            ),
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("Name: ${widget.name}"),
+                            Text("Email: ${widget.email}"),
+                            Text("Address Line 1: ${widget.addressLine1}"),
+                            Text("Address Line 2: ${widget.addressLine2}"),
+                            Text("Postal Code: ${widget.postalCode}"),
+                            Text("State: ${widget.state}"),
+                            Text("District: ${widget.district}"),
+                          ],
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 30),
 
-                      // Password
-                      TextField(
-                        controller: passwordController,
-                        obscureText: !showPassword,
-                        decoration: InputDecoration(
-                          prefixIconColor: Colors.black54,
-                          prefixIcon: const Icon(Icons.key),
-                          hintText: "PASSWORD",
-                          border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              showPassword
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
-                            ),
-                            onPressed: () =>
-                                setState(() => showPassword = !showPassword),
-                          ),
-                        ),
+                    // Username & Password fields
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      const SizedBox(height: 16),
-
-                      // Confirm Password
-                      TextField(
-                        controller: confirmPasswordController,
-                        obscureText: !showConfirm,
-                        decoration: InputDecoration(
-                          prefixIconColor: Colors.black54,
-                          prefixIcon: const Icon(Icons.key),
-                          hintText: "CONFIRM PASSWORD",
-                          border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              showConfirm
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
-                            ),
-                            onPressed: () =>
-                                setState(() => showConfirm = !showConfirm),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-
-                      // Create Account button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _submit,
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            backgroundColor: Colors.blue,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                      child: Column(
+                        children: [
+                          // Username
+                          TextField(
+                            controller: usernameController,
+                            decoration: const InputDecoration(
+                              prefixIconColor: Colors.black54,
+                              prefixIcon: Icon(Icons.person),
+                              hintText: "USERNAME",
+                              border: OutlineInputBorder(),
                             ),
                           ),
-                          child: const Text(
-                            'Create Account',
-                            style: TextStyle(fontSize: 16, color: Colors.white),
-                          ),
-                        ),
-                      ),
+                          const SizedBox(height: 16),
 
-                      // Add extra spacing for keyboard
-                      SizedBox(height: screenHeight * 0.05),
-                    ],
-                  ),
+                          // Password instructions
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: Text(
+                                'Password must be at least 8 characters, contain 1 uppercase, 1 lowercase, and 1 special character.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // Password
+                          TextField(
+                            controller: passwordController,
+                            obscureText: !showPassword,
+                            decoration: InputDecoration(
+                              prefixIconColor: Colors.black54,
+                              prefixIcon: const Icon(Icons.key),
+                              hintText: "PASSWORD",
+                              border: const OutlineInputBorder(),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  showPassword
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                ),
+                                onPressed: () =>
+                                    setState(() => showPassword = !showPassword),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Confirm Password
+                          TextField(
+                            controller: confirmPasswordController,
+                            obscureText: !showConfirm,
+                            decoration: InputDecoration(
+                              prefixIconColor: Colors.black54,
+                              prefixIcon: const Icon(Icons.key),
+                              hintText: "CONFIRM PASSWORD",
+                              border: const OutlineInputBorder(),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  showConfirm
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                ),
+                                onPressed: () =>
+                                    setState(() => showConfirm = !showConfirm),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 30),
+
+                          // Create Account button
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _submit, // Disable when loading
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                backgroundColor: _isLoading ? Colors.blue.shade300 : Colors.blue,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Create Account',
+                                      style: TextStyle(fontSize: 16, color: Colors.white),
+                                    ),
+                            ),
+                          ),
+
+                          // Add extra spacing for keyboard
+                          SizedBox(height: screenHeight * 0.05),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
+        
+        // Full-screen loading overlay
+        if (_isLoading) _buildLoadingOverlay(),
+      ],
     );
   }
 }
