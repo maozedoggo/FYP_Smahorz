@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -139,6 +140,13 @@ class _SchedulePageState extends State<SchedulePage> {
       await newScheduleRef.set(scheduleData);
       print('✅ Schedule added to Realtime DB with ID: $scheduleId');
 
+      // ✅ ADD LOGGING HERE
+      await _logScheduleActivity(
+        action: action,
+        scheduleTime: time,
+        door: door,
+      );
+
       // SECONDARY: Optional backup to Firestore
       try {
         await _firestore
@@ -177,9 +185,43 @@ class _SchedulePageState extends State<SchedulePage> {
     print('🗑️ Deleting schedule from Realtime DB: $id');
 
     try {
+      // Get schedule details before deleting (for logging)
+      final scheduleSnapshot = await _realtimeDB
+          .child('$devicePath/schedules/$id')
+          .once();
+
+      final scheduleData =
+          scheduleSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+
       // Delete from Realtime Database
       await _realtimeDB.child('$devicePath/schedules/$id').remove();
       print('✅ Schedule deleted from Realtime DB');
+
+      // Log deletion activity
+      if (scheduleData != null) {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null && user.email != null) {
+          try {
+            await _firestore
+                .collection('households')
+                .doc(widget.householdUid)
+                .collection('members')
+                .doc(user.email!)
+                .collection('activityLog')
+                .add({
+                  'userEmail': user.email!,
+                  'deviceId': widget.deviceId,
+                  'deviceName': widget.deviceName,
+                  'action':
+                      'Deleted schedule for ${scheduleData['time'] ?? 'unknown time'}',
+                  'timestamp': FieldValue.serverTimestamp(),
+                });
+            print('✅ Schedule deletion logged');
+          } catch (e) {
+            print('⚠️ Failed to log schedule deletion: $e');
+          }
+        }
+      }
 
       // Also delete from Firestore backup
       try {
@@ -461,6 +503,83 @@ class _SchedulePageState extends State<SchedulePage> {
         );
       },
     );
+  }
+
+  // Add this method inside _SchedulePageState class
+  Future<void> _logScheduleActivity({
+    required String action,
+    required String scheduleTime,
+    String door = '',
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null || user.email == null) {
+        print("User not logged in, skipping schedule logging");
+        return;
+      }
+
+      final householdDoc = await _firestore
+          .collection('households')
+          .doc(widget.householdUid)
+          .get();
+
+      if (!householdDoc.exists) {
+        print("Household not found, skipping logging");
+        return;
+      }
+
+      // Get user's username
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(user.email)
+          .get();
+      final username = userDoc.data()?['username'] ?? user.email!;
+      final role = userDoc.data()?['role'] ?? 'member';
+
+      // Ensure member document exists
+      final memberRef = _firestore
+          .collection('households')
+          .doc(widget.householdUid)
+          .collection('members')
+          .doc(user.email!);
+
+      await memberRef.set({
+        'username': username,
+        'role': role,
+      }, SetOptions(merge: true));
+
+      // Log the schedule creation activity
+      await _firestore
+          .collection('households')
+          .doc(widget.householdUid)
+          .collection('members')
+          .doc(user.email!)
+          .collection('activityLog')
+          .add({
+            'userEmail': user.email!,
+            'deviceId': widget.deviceId,
+            'deviceName': widget.deviceName,
+            'action': _formatScheduleAction(action, scheduleTime, door),
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+
+      print("✅ Schedule creation logged to activity log");
+    } catch (e) {
+      print("❌ Error logging schedule activity: $e");
+      // Don't show error to user - logging failure shouldn't affect schedule creation
+    }
+  }
+
+  // Helper method to format the schedule action text
+  String _formatScheduleAction(String action, String time, String door) {
+    final formattedTime = time.padLeft(5, '0'); // Ensure HH:MM format
+
+    if (widget.deviceType.toLowerCase().contains('parcel')) {
+      final doorText = door.isNotEmpty ? " ($door Door)" : "";
+      return "Scheduled to $action$doorText at $formattedTime";
+    } else {
+      return "Scheduled to $action at $formattedTime";
+    }
   }
 
   String _getScheduleDisplayText(Map<String, dynamic> schedule) {
