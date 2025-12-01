@@ -60,6 +60,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
   bool _isControllingDevice = false;
   String? _currentlyControllingDeviceId;
   String? _currentlyControllingSwitchType;
+  bool _isSwitchDebounced = false;
+  Timer? _debounceTimer;
 
   // ===========================================================================
   // LIFECYCLE METHODS
@@ -75,6 +77,28 @@ class _HomePageState extends State<HomePage> with RouteAware {
   void didChangeDependencies() {
     super.didChangeDependencies();
     routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
+  }
+
+  @override
+  void didPopNext() {
+    // Called when returning to this page from another page
+    _refreshHomeData();
+    super.didPopNext();
+  }
+
+  @override
+  void didPush() {
+    // Called when this page is first shown or brought to front
+    _refreshHomeData();
+    super.didPush();
+  }
+
+  void _refreshHomeData() {
+    if (mounted) {
+      print("Refreshing home page data...");
+      _loadWeather();
+      _loadUserDevices();
+    }
   }
 
   void _setupPeriodicWeatherChecks() {
@@ -103,6 +127,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   @override
   void dispose() {
     _weatherCheckTimer?.cancel();
+    _debounceTimer?.cancel();
     for (final sub in _deviceSubscriptions.values) {
       sub.cancel();
     }
@@ -317,10 +342,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 : false,
           };
         } else {
-          // === SIMPLIFY THIS ===
           // All other devices use simple boolean status
           statusMap[id] = statusData ?? false;
-          // === END SIMPLIFY ===
         }
       }
 
@@ -417,12 +440,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final deviceType = deviceData['type'] ?? 'Unknown';
       final deviceName = deviceData['name'] ?? id;
 
-      // In _addDeviceById method - find this part:
       await deviceRef.update({
         'householdId': householdId,
         'status': deviceType.toLowerCase().contains('parcel')
             ? {'insideStatus': false, 'outsideStatus': false}
-            : false, // This ensures clothes hanger gets boolean false
+            : false,
         'addedAt': FieldValue.serverTimestamp(),
       });
 
@@ -484,7 +506,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: Colors.black87, // darker dialog to match theme
+          backgroundColor: Colors.black87,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -597,17 +619,24 @@ class _HomePageState extends State<HomePage> with RouteAware {
   // ===========================================================================
   // DEVICE CONTROL METHODS
   // ===========================================================================
-  // ===========================================================================
-  // DEVICE CONTROL METHODS
-  // ===========================================================================
-  // In powerSwitchChanged method - use simple boolean for all devices
   void powerSwitchChanged(
     bool value,
     String deviceId, [
     String switchType = 'status',
   ]) async {
-    // Prevent multiple rapid toggles
-    if (_isControllingDevice) return;
+    // Debounce: prevent rapid consecutive toggles
+    if (_isSwitchDebounced) {
+      print("⚡ Switch debounced, ignoring rapid toggle");
+      return;
+    }
+    
+    _isSwitchDebounced = true;
+    
+    // Reset debounce after 500ms
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _isSwitchDebounced = false;
+    });
 
     print("=== SWITCH TOGGLED ===");
     print("Device ID: $deviceId");
@@ -649,7 +678,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final deviceName = deviceDoc.data()?['name'] ?? deviceId;
 
       if (deviceType.contains('parcel')) {
-        // update relevant field inside map
         final updateData = switchType == 'status'
             ? {'status': value, 'lastUpdated': FieldValue.serverTimestamp()}
             : {
@@ -658,17 +686,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
               };
         await _firestore.collection('devices').doc(deviceId).update(updateData);
 
-        // Realtime DB path for parcel subfield
         final path = switchType == 'status' ? 'status' : switchType;
         await _realtimeDB.child('$householdId/$deviceId/$path').set(value);
 
-        // Build action string
         final action =
             (switchType == 'insideStatus' || switchType == 'outsideStatus')
             ? "${switchType == 'insideStatus' ? 'Toggled inside door' : 'Toggled outside door'} -> ${value ? 'On' : 'Off'}"
             : "Toggled $deviceName -> ${value ? 'On' : 'Off'}";
 
-        // Log activity
         await _logActivity(
           householdId: householdId,
           userEmail: user.email!,
@@ -677,14 +702,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
           action: action,
         );
       } else {
-        // Normal device: status is bool
         await _firestore.collection('devices').doc(deviceId).update({
           'status': value,
           'lastUpdated': FieldValue.serverTimestamp(),
         });
         await _realtimeDB.child('$householdId/$deviceId/status').set(value);
 
-        // Build action string - special-case hangers for more readable text
         String action;
         if (deviceType.contains('hanger') || deviceType.contains('clothe')) {
           action = value
@@ -696,7 +719,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
               : 'Turned OFF ${deviceName}';
         }
 
-        // Log activity
         await _logActivity(
           householdId: householdId,
           userEmail: user.email!,
@@ -706,7 +728,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
         );
       }
 
-      // Verify the write
       final snapshot = await _realtimeDB
           .child(
             '$householdId/$deviceId/${switchType == 'status' ? 'status' : switchType}',
@@ -721,10 +742,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
       }
     } catch (e) {
       print("✗ Error controlling device: $e");
-      // Revert local state on error
       _updateLocalDeviceStatus(deviceId, switchType, !value);
     } finally {
-      // Add a small delay before re-enabling controls to allow listeners to settle
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
           _isControllingDevice = false;
@@ -735,7 +754,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
   }
 
-  // ---------- Activity logging helper ----------
   Future<void> _logActivity({
     required String householdId,
     required String userEmail,
@@ -744,7 +762,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
     required String action,
   }) async {
     try {
-      // Ensure member document exists and contains minimal info (username, role)
       final userDoc = await _firestore.collection('users').doc(userEmail).get();
       final username = userDoc.data()?['username'] ?? userEmail;
       final role = userDoc.data()?['role'] ?? 'member';
@@ -812,7 +829,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final outside = status is Map ? status['outsideStatus'] ?? false : false;
       return 'In: ${inside ? 'On' : 'Off'}, Out: ${outside ? 'On' : 'Off'}';
     } else {
-      // All other devices use simple boolean status
       final isOn =
           status == true || (status is Map ? status['status'] ?? false : false);
       return isOn ? 'Extend' : 'Retract';
@@ -828,16 +844,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final outside = status is Map ? status['outsideStatus'] ?? false : false;
       return (inside || outside) ? Colors.green : Colors.red;
     } else {
-      // All other devices use simple boolean status
       final isOn =
           status == true || (status is Map ? status['status'] ?? false : false);
       return isOn ? Colors.green : Colors.red;
     }
   }
 
-  // ===========================================================================
-  // PARCEL BOX WIDGET - Individual cards for inside and outside doors
-  // ===========================================================================
   // ===========================================================================
   // NEW METHODS FOR HANDLING INDIVIDUAL CARDS
   // ===========================================================================
@@ -846,9 +858,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
     for (final device in _devices) {
       final type = (device['type'] ?? '').toString().toLowerCase();
       if (type.contains('parcel')) {
-        total += 2; // Two cards for parcel box (inside + outside)
+        total += 2;
       } else {
-        total += 1; // One card for regular devices
+        total += 1;
       }
     }
     return total;
@@ -862,24 +874,21 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final deviceStatus = _deviceStatus.value[device['id']];
 
       if (type.contains('parcel')) {
-        // Parcel box - return individual cards for inside and outside
         if (index == currentIndex) {
           return _buildParcelDoorCard(
             device,
             deviceStatus,
             true,
-          ); // Inside door
+          );
         } else if (index == currentIndex + 1) {
           return _buildParcelDoorCard(
             device,
             deviceStatus,
             false,
-          ); // Outside door
+          );
         }
         currentIndex += 2;
       } else {
-        // Regular device
-        // In _getDeviceCardAtIndex() method - for regular devices:
         if (index == currentIndex) {
           final iconPath = type.contains('clothe') || type.contains('hanger')
               ? 'lib/icons/drying-rack.png'
@@ -888,10 +897,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
           final statusText = _getStatusText(device['id'], device['type']);
           final statusColor = _getStatusColor(device['id'], device['type']);
 
-          // === SIMPLIFY THIS ===
-          // All devices now use simple boolean status
           final displayStatus = deviceStatus is bool ? deviceStatus : false;
-          // === END SIMPLIFY ===
 
           return GestureDetector(
             onTap: _isAddingDevice ? null : () => _navigateToDevicePage(device),
@@ -914,12 +920,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
       }
     }
 
-    return Container(); // Fallback
+    return Container();
   }
 
-  // ===========================================================================
-  // INDIVIDUAL PARCEL DOOR CARD
-  // ===========================================================================
   // ===========================================================================
   // INDIVIDUAL PARCEL DOOR CARD
   // ===========================================================================
@@ -1407,54 +1410,58 @@ class _HomePageState extends State<HomePage> with RouteAware {
                       ),
 
                       // DEVICES GRID
-                      // DEVICES GRID
                       Expanded(
-                        child: ValueListenableBuilder<Map<String, dynamic>>(
-                          valueListenable: _deviceStatus,
-                          builder: (context, statusMap, _) {
-                            if (_devices.isEmpty) {
-                              return Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: const [
-                                    Icon(
-                                      Icons.device_hub,
-                                      size: 56,
-                                      color: Colors.white24,
-                                    ),
-                                    SizedBox(height: 12),
-                                    Text(
-                                      "No devices added yet",
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    SizedBox(height: 12),
-                                  ],
-                                ),
-                              );
-                            }
-
-                            return GridView.builder(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: horizontalPadding,
-                              ),
-                              itemCount:
-                                  _getTotalDeviceCards(), // Use new method to count cards
-                              gridDelegate:
-                                  SliverGridDelegateWithMaxCrossAxisExtent(
-                                    maxCrossAxisExtent: screenWidth * 0.5,
-                                    childAspectRatio: 0.9,
-                                    mainAxisSpacing: screenHeight * 0.02,
-                                    crossAxisSpacing: screenWidth * 0.03,
-                                  ),
-                              itemBuilder: (context, index) {
-                                final deviceCard = _getDeviceCardAtIndex(index);
-                                return deviceCard;
-                              },
-                            );
+                        child: RefreshIndicator(
+                          onRefresh: () async {
+                            await _loadWeather();
+                            await _loadUserDevices();
                           },
+                          child: ValueListenableBuilder<Map<String, dynamic>>(
+                            valueListenable: _deviceStatus,
+                            builder: (context, statusMap, _) {
+                              if (_devices.isEmpty) {
+                                return Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(
+                                        Icons.device_hub,
+                                        size: 56,
+                                        color: Colors.white24,
+                                      ),
+                                      SizedBox(height: 12),
+                                      Text(
+                                        "No devices added yet",
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      SizedBox(height: 12),
+                                    ],
+                                  ),
+                                );
+                              }
+
+                              return GridView.builder(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: horizontalPadding,
+                                ),
+                                itemCount: _getTotalDeviceCards(),
+                                gridDelegate:
+                                    SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: screenWidth * 0.5,
+                                      childAspectRatio: 0.9,
+                                      mainAxisSpacing: screenHeight * 0.02,
+                                      crossAxisSpacing: screenWidth * 0.03,
+                                    ),
+                                itemBuilder: (context, index) {
+                                  final deviceCard = _getDeviceCardAtIndex(index);
+                                  return deviceCard;
+                                },
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ],
