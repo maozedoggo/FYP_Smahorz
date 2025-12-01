@@ -6,7 +6,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 class NotificationPage extends StatelessWidget {
   const NotificationPage({super.key});
 
+  // notification_page.dart - Updated respondToInvite function
+  // Updated function signature with BuildContext parameter
   Future<void> respondToInvite(
+    BuildContext context, // Add this parameter
     String notificationId,
     String status,
     String householdId,
@@ -26,7 +29,7 @@ class NotificationPage extends StatelessWidget {
 
     if (status == 'accepted') {
       try {
-        // ✅ STEP 1: Get inviter’s householdId if not provided
+        // ✅ STEP 1: Get inviter's householdId if not provided
         String? inviterHouseholdId = householdId;
         if (inviterHouseholdId.isEmpty) {
           final inviterDoc = await firestore
@@ -46,14 +49,70 @@ class NotificationPage extends StatelessWidget {
 
         if (inviterHouseholdId.isEmpty) {
           debugPrint("Inviter has no household ID — cannot join household.");
+          // Show error message
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Inviter has no household ID.'),
+              backgroundColor: Colors.red,
+            ),
+          );
           return;
         }
 
-        // ✅ STEP 2: Update user’s profile with inviter’s householdId & role
-        await firestore.collection('users').doc(userEmail).set({
+        // ✅ STEP 1.5: Get household address details
+        final householdDoc = await firestore
+            .collection('households')
+            .doc(inviterHouseholdId)
+            .get();
+
+        if (!householdDoc.exists) {
+          debugPrint("Household document not found.");
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Household not found.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        final householdData = householdDoc.data();
+        final addressMap = <String, dynamic>{};
+
+        // Extract address fields if they exist
+        final addressFields = [
+          'addressLine1',
+          'addressLine2',
+          'district',
+          'state',
+          'postalCode',
+        ];
+        for (final field in addressFields) {
+          if (householdData != null && householdData.containsKey(field)) {
+            addressMap[field] = householdData[field];
+          }
+        }
+
+        // ✅ STEP 2: Update user's profile with inviter's householdId, role, AND address
+        final userUpdateData = <String, dynamic>{
           'householdId': inviterHouseholdId,
           'role': 'member',
-        }, SetOptions(merge: true));
+        };
+
+        // Add address fields if they exist
+        if (addressMap.isNotEmpty) {
+          userUpdateData.addAll(addressMap);
+          debugPrint("Updating user address with household address data");
+        } else {
+          debugPrint("No address data found in household document");
+        }
+
+        await firestore
+            .collection('users')
+            .doc(userEmail)
+            .set(userUpdateData, SetOptions(merge: true));
 
         // ✅ STEP 3: Add user as member in household collection
         final householdRef = firestore
@@ -87,8 +146,26 @@ class NotificationPage extends StatelessWidget {
               'status': 'accepted',
               'sentAt': FieldValue.serverTimestamp(),
             });
+
+        // Show success message
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Successfully joined household! Address updated.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
       } catch (e) {
         debugPrint("Error accepting invite: $e");
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     } else if (status == 'rejected') {
       // Notify inviter that invite was rejected
@@ -104,6 +181,16 @@ class NotificationPage extends StatelessWidget {
             'status': 'rejected',
             'sentAt': FieldValue.serverTimestamp(),
           });
+
+      // Show rejection message
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invitation rejected.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -253,6 +340,7 @@ class NotificationPage extends StatelessWidget {
                               children: [
                                 TextButton(
                                   onPressed: () => respondToInvite(
+                                    context, // PASS CONTEXT HERE
                                     id,
                                     'accepted',
                                     householdId,
@@ -267,6 +355,7 @@ class NotificationPage extends StatelessWidget {
                                 ),
                                 TextButton(
                                   onPressed: () => respondToInvite(
+                                    context, // PASS CONTEXT HERE
                                     id,
                                     'rejected',
                                     householdId,

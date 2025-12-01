@@ -108,14 +108,40 @@ class _HouseholdManagerState extends State<HouseholdManager> {
                   ? "Unnamed Household"
                   : controller.text.trim();
 
-              // Create household document using email for admin and members
-              final newHousehold = await _firestore.collection('households').add({
-                'name': name,
-                // Creator is owner but NOT auto-admin. Admin chosen via voting.
-                'adminId': null,
-                'members': [user.email],
-                'admins': [],
-              });
+              // 1. First, fetch the user's address data
+              final userDoc = await _firestore
+                  .collection('users')
+                  .doc(user.email)
+                  .get();
+
+              if (!userDoc.exists) return;
+
+              final userData = userDoc.data() ?? {};
+
+              // Debug: print what we found
+              print('User data keys: ${userData.keys}');
+              print('addressLine1: ${userData['addressLine1']}');
+              print('district: ${userData['district']}');
+              print('state: ${userData['state']}');
+              print('postalCode: ${userData['postalCode']}');
+
+              // 3. Create household with address fields (add one by one)
+              final newHousehold = await _firestore
+                  .collection('households')
+                  .add({
+                    'name': name,
+                    'adminId': null,
+                    'members': [user.email],
+                    'admins': [],
+                    // Add address fields one by one
+                    'addressLine1': userData['addressLine1'] ?? '',
+                    'addressLine2': userData['addressLine2'] ?? '',
+                    'district': userData['district'] ?? '',
+                    'state': userData['state'] ?? '',
+                    'postalCode': userData['postalCode'] ?? '',
+                  });
+
+              print('Household created with ID: ${newHousehold.id}');
 
               await _firestore.collection('users').doc(user.email).update({
                 'householdId': newHousehold.id,
@@ -123,7 +149,7 @@ class _HouseholdManagerState extends State<HouseholdManager> {
                 'role': 'owner',
               });
 
-              Navigator.pop(context);
+              if (context.mounted) Navigator.pop(context);
               _loadHouseholdData();
             },
             child: const Text("Create"),

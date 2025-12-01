@@ -26,6 +26,8 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _showPopup(String title, String message) {
+
+    // Error handling message
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -36,7 +38,7 @@ class _LoginPageState extends State<LoginPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text("OK", style: TextStyle(color: Colors.redAccent)),
+            child: const Text("OK", style: TextStyle(color: Colors.blueAccent)),
           ),
         ],
       ),
