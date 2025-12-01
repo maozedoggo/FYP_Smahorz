@@ -27,8 +27,9 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   // ===========================================================================
   // STATE VARIABLES
   // ===========================================================================
-  bool _isUpdating = false; // Track if update is in progress
+  bool _isUpdating = false;
   dynamic _deviceStatus = false;
+  dynamic _displayedStatus = false;
   String? householdUid;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final DatabaseReference _realtimeDB = FirebaseDatabase.instanceFor(
@@ -42,8 +43,8 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   StreamSubscription<DatabaseEvent>? _parcelOutsideSubscription;
   StreamSubscription<DatabaseEvent>? _connectionStatusSubscription;
 
-  bool _isControlling = false;
-  bool _deviceConnected = false; // Track device connection status
+  bool _deviceConnected = false;
+  bool _isInitialLoad = true;
 
   // ===========================================================================
   // LIFECYCLE METHODS
@@ -52,6 +53,15 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   void initState() {
     super.initState();
     _loadHouseholdUid();
+
+    // Reduced initial load time to 1 second for better UX
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted) {
+        setState(() {
+          _isInitialLoad = false;
+        });
+      }
+    });
   }
 
   @override
@@ -64,19 +74,18 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   }
 
   // ===========================================================================
-  // REALTIME DATABASE METHODS - FIXED
+  // REALTIME DATABASE METHODS
   // ===========================================================================
   void _setupRealtimeListener(String householdId) {
     final deviceType = widget.deviceType.toLowerCase();
 
-    // Cancel any existing subscriptions
     _deviceSubscription?.cancel();
     _parcelInsideSubscription?.cancel();
     _parcelOutsideSubscription?.cancel();
     _connectionStatusSubscription?.cancel();
 
     // ===========================================================================
-    // CONNECTION STATUS LISTENER - NEW
+    // CONNECTION STATUS LISTENER
     // ===========================================================================
     final connectionPath = '$householdId/${widget.deviceId}/connectionStatus';
     print("DeviceControlPage listening to connection status: $connectionPath");
@@ -95,7 +104,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                 "DeviceControlPage connection update: ${widget.deviceId} = $connectionStatus",
               );
             } else {
-              // If connectionStatus doesn't exist, assume device is offline
               setState(() {
                 _deviceConnected = false;
               });
@@ -113,7 +121,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
         );
 
     if (deviceType.contains('parcel')) {
-      // Parcel box - listen to individual status paths
       final insidePath = '$householdId/${widget.deviceId}/insideStatus';
       final outsidePath = '$householdId/${widget.deviceId}/outsideStatus';
 
@@ -124,7 +131,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       _parcelInsideSubscription = _realtimeDB.child(insidePath).onValue.listen((
         DatabaseEvent event,
       ) {
-        if (event.snapshot.exists && mounted && !_isControlling) {
+        if (event.snapshot.exists && mounted) {
           final insideStatus = event.snapshot.value == true;
           _updateParcelStatus(insideStatus, true);
         }
@@ -134,13 +141,12 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
           .child(outsidePath)
           .onValue
           .listen((DatabaseEvent event) {
-            if (event.snapshot.exists && mounted && !_isControlling) {
+            if (event.snapshot.exists && mounted) {
               final outsideStatus = event.snapshot.value == true;
               _updateParcelStatus(outsideStatus, false);
             }
           });
     } else {
-      // All other devices - simple status
       final path = '$householdId/${widget.deviceId}/status';
       print("DeviceControlPage listening to: $path");
 
@@ -149,13 +155,17 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
           .onValue
           .listen(
             (DatabaseEvent event) {
-              if (event.snapshot.exists && mounted && !_isControlling) {
+              if (event.snapshot.exists && mounted) {
                 final data = event.snapshot.value;
                 final bool isOn = data == true;
 
-                setState(() {
-                  _deviceStatus = isOn;
-                });
+                // Only update if not currently performing a user action
+                if (!_isUpdating) {
+                  setState(() {
+                    _deviceStatus = isOn;
+                    _displayedStatus = isOn;
+                  });
+                }
 
                 print("DeviceControlPage update: ${widget.deviceId} = $isOn");
               }
@@ -168,15 +178,21 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   }
 
   void _updateParcelStatus(bool status, bool isInside) {
+    // Only update if not currently performing a user action
+    if (_isUpdating) return;
+
     setState(() {
       if (_deviceStatus is! Map) {
         _deviceStatus = {'insideStatus': false, 'outsideStatus': false};
+        _displayedStatus = {'insideStatus': false, 'outsideStatus': false};
       }
 
       if (isInside) {
         _deviceStatus['insideStatus'] = status;
+        _displayedStatus['insideStatus'] = status;
       } else {
         _deviceStatus['outsideStatus'] = status;
+        _displayedStatus['outsideStatus'] = status;
       }
     });
 
@@ -186,39 +202,53 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   }
 
   // ===========================================================================
-  // DEVICE CONTROL METHODS - FIXED
+  // DEVICE CONTROL METHODS
   // ===========================================================================
-  void _toggleDevice() async {
-    // Only check if already controlling or updating
-    if (householdUid == null || _isControlling || _isUpdating) {
+  Future<void> _toggleDevice() async {
+    if (_isUpdating || householdUid == null || !_deviceConnected) {
       return;
     }
 
-    // Store previous state before any operations
     final previousStatus = _deviceStatus;
+    final previousDisplayStatus = _displayedStatus;
 
     try {
-      _isControlling = true; // Prevent multiple rapid toggles
-      _isUpdating = true; // Show loading state
-      setState(() {}); // Update UI immediately to show loading
+      setState(() {
+        _isUpdating = true;
+
+        // IMMEDIATELY update displayed status for instant UI feedback
+        final deviceType = widget.deviceType.toLowerCase();
+        if (deviceType.contains('parcel')) {
+          final currentInside = _displayedStatus is Map
+              ? _displayedStatus['insideStatus'] ?? false
+              : false;
+          final currentOutside = _displayedStatus is Map
+              ? _displayedStatus['outsideStatus'] ?? false
+              : false;
+          final newState = !(currentInside || currentOutside);
+          _displayedStatus = {
+            'insideStatus': newState,
+            'outsideStatus': newState,
+          };
+        } else {
+          _displayedStatus = !(_displayedStatus == true);
+        }
+      });
 
       final deviceType = widget.deviceType.toLowerCase();
       final newStatus = _getNewStatus();
 
-      print("=== DEVICE CONTROL PAGE - TOGGLING DEVICE ===");
-      print("Device ID: ${widget.deviceId}");
-      print("Device Type: ${widget.deviceType}");
-      print("Household ID: $householdUid");
-      print("New Status: $newStatus");
+      print("=== USER TOGGLING DEVICE ===");
+      print("Device: ${widget.deviceName} (${widget.deviceId})");
+      print("From: $previousStatus");
+      print("To: $newStatus");
 
-      // Perform the update operations and wait for them to complete
       if (deviceType.contains('parcel')) {
         await _updateParcelBoxStatus(newStatus);
       } else {
         await _updateSimpleDeviceStatus(newStatus);
       }
 
-      // Update local state after successful update
       setState(() {
         _deviceStatus = newStatus;
       });
@@ -227,21 +257,27 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     } catch (error) {
       print("✗ Error controlling device: $error");
 
-      // Revert to previous state on error
       setState(() {
         _deviceStatus = previousStatus;
+        _displayedStatus = previousDisplayStatus;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Error controlling device: $error"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error: ${error.toString()}"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     } finally {
-      _isControlling = false; // Re-enable controls
-      _isUpdating = false; // Hide loading state
-      setState(() {}); // Update UI
+      // FIXED: Remove delay - allow immediate subsequent clicks
+      if (mounted) {
+        setState(() {
+          _isUpdating = false;
+        });
+      }
     }
   }
 
@@ -249,7 +285,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     final deviceType = widget.deviceType.toLowerCase();
 
     if (deviceType.contains('parcel')) {
-      // For parcel box, toggle both doors together in control page
       final currentInside = _deviceStatus is Map
           ? _deviceStatus['insideStatus'] ?? false
           : false;
@@ -257,16 +292,13 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
           ? _deviceStatus['outsideStatus'] ?? false
           : false;
 
-      // Toggle both doors to the same state
       final newState = !(currentInside || currentOutside);
       return {'insideStatus': newState, 'outsideStatus': newState};
     } else {
-      // Simple toggle for other devices
       return !(_deviceStatus == true);
     }
   }
 
-  // ---------- Activity logging helper ----------
   Future<void> _logActivity({
     required String householdId,
     required String userEmail,
@@ -275,7 +307,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     required String action,
   }) async {
     try {
-      // Ensure member document exists with username and role
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userEmail)
@@ -311,14 +342,12 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   }
 
   Future<void> _updateSimpleDeviceStatus(bool newStatus) async {
-    // Update Firestore
     await _firestore.collection('devices').doc(widget.deviceId).update({
       'status': newStatus,
       'lastUpdated': FieldValue.serverTimestamp(),
     });
     print("✓ Updated Firestore: status = $newStatus");
 
-    // Update Realtime Database
     await _realtimeDB
         .child('$householdUid/${widget.deviceId}/status')
         .set(newStatus);
@@ -326,7 +355,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       "✓ Updated Realtime DB: $householdUid/${widget.deviceId}/status = $newStatus",
     );
 
-    // Log activity
     final user = FirebaseAuth.instance.currentUser;
     final deviceName = widget.deviceName;
     if (user != null && householdUid != null) {
@@ -350,14 +378,12 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     final insideStatus = newStatus['insideStatus'] ?? false;
     final outsideStatus = newStatus['outsideStatus'] ?? false;
 
-    // Update Firestore
     await _firestore.collection('devices').doc(widget.deviceId).update({
       'status': {'insideStatus': insideStatus, 'outsideStatus': outsideStatus},
       'lastUpdated': FieldValue.serverTimestamp(),
     });
     print("✓ Updated Firestore parcel box status");
 
-    // Update Realtime Database - set both values
     await _realtimeDB
         .child('$householdUid/${widget.deviceId}/insideStatus')
         .set(insideStatus);
@@ -368,7 +394,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       "✓ Updated Realtime DB parcel box: inside=$insideStatus, outside=$outsideStatus",
     );
 
-    // Log activity
     final user = FirebaseAuth.instance.currentUser;
     if (user != null && householdUid != null) {
       final action = (insideStatus || outsideStatus)
@@ -401,17 +426,20 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
         _setupRealtimeListener(householdId);
         print("DeviceControlPage loaded household: $householdId");
 
-        // Also load initial device status
         _loadInitialDeviceStatus();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Household ID not found.")),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Household ID not found.")),
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error fetching household ID: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error fetching household ID: $e")),
+        );
+      }
     }
   }
 
@@ -432,8 +460,10 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
             _deviceStatus = status is Map
                 ? Map<String, bool>.from(status)
                 : {'insideStatus': false, 'outsideStatus': false};
+            _displayedStatus = _deviceStatus;
           } else {
             _deviceStatus = status == true;
+            _displayedStatus = _deviceStatus;
           }
         });
 
@@ -451,49 +481,51 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     final deviceType = widget.deviceType.toLowerCase();
 
     if (deviceType.contains('hanger') || deviceType.contains('clothe')) {
-      return _deviceStatus == true ? "Extended" : "Retracted";
+      return _displayedStatus == true ? "Extended" : "Retracted";
     } else if (deviceType.contains('parcel')) {
-      final inside = _deviceStatus is Map
-          ? _deviceStatus['insideStatus'] ?? false
+      final inside = _displayedStatus is Map
+          ? _displayedStatus['insideStatus'] ?? false
           : false;
-      final outside = _deviceStatus is Map
-          ? _deviceStatus['outsideStatus'] ?? false
+      final outside = _displayedStatus is Map
+          ? _displayedStatus['outsideStatus'] ?? false
           : false;
       return 'In: ${inside ? "Open" : "Closed"}, Out: ${outside ? "Open" : "Closed"}';
     }
-    return _deviceStatus == true ? "On" : "Off";
+    return _displayedStatus == true ? "On" : "Off";
   }
 
   String _getButtonText() {
     final deviceType = widget.deviceType.toLowerCase();
 
     if (deviceType.contains('hanger') || deviceType.contains('clothe')) {
-      return _deviceStatus == true ? "RETRACT" : "EXTEND";
+      return _displayedStatus == true ? "RETRACT" : "EXTEND";
     } else if (deviceType.contains('parcel')) {
-      final inside = _deviceStatus is Map
-          ? _deviceStatus['insideStatus'] ?? false
+      final inside = _displayedStatus is Map
+          ? _displayedStatus['insideStatus'] ?? false
           : false;
-      final outside = _deviceStatus is Map
-          ? _deviceStatus['outsideStatus'] ?? false
+      final outside = _displayedStatus is Map
+          ? _displayedStatus['outsideStatus'] ?? false
           : false;
       return (inside || outside) ? "CLOSE ALL" : "OPEN ALL";
     }
-    return _deviceStatus == true ? "TURN OFF" : "TURN ON";
+    return _displayedStatus == true ? "TURN OFF" : "TURN ON";
   }
 
   Color _getButtonColor() {
+    if (_isUpdating) return Colors.grey;
+
     final deviceType = widget.deviceType.toLowerCase();
 
     if (deviceType.contains('parcel')) {
-      final inside = _deviceStatus is Map
-          ? _deviceStatus['insideStatus'] ?? false
+      final inside = _displayedStatus is Map
+          ? _displayedStatus['insideStatus'] ?? false
           : false;
-      final outside = _deviceStatus is Map
-          ? _deviceStatus['outsideStatus'] ?? false
+      final outside = _displayedStatus is Map
+          ? _displayedStatus['outsideStatus'] ?? false
           : false;
       return (inside || outside) ? Colors.redAccent : Colors.green;
     }
-    return _deviceStatus == true ? Colors.redAccent : Colors.green;
+    return _displayedStatus == true ? Colors.redAccent : Colors.green;
   }
 
   String _getDeviceIcon() {
@@ -511,7 +543,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   }
 
   // ===========================================================================
-  // BUILD METHOD - UPDATED UI
+  // BUILD METHOD
   // ===========================================================================
   @override
   Widget build(BuildContext context) {
@@ -520,7 +552,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Back button
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 5.0),
               child: Align(
@@ -535,7 +566,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
             const SizedBox(height: 20),
 
-            // Device name
             Align(
               child: Text(
                 widget.deviceName,
@@ -549,7 +579,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
             const SizedBox(height: 10),
 
-            // Device type
             Text(
               "Type: ${widget.deviceType}",
               style: const TextStyle(color: Colors.white70, fontSize: 16),
@@ -557,7 +586,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
             const SizedBox(height: 20),
 
-            // Status Card
             SizedBox(
               width: double.infinity,
               child: Card(
@@ -573,8 +601,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                       Image.asset(
                         _getDeviceIcon(),
                         width: 80,
-                        color: Colors
-                            .blueAccent, // Always blue, not affected by connection status
+                        color: Colors.blueAccent,
                       ),
                       const SizedBox(height: 15),
                       Text(
@@ -591,7 +618,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      // Device Connection Status
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -624,27 +650,22 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
             const SizedBox(height: 20),
 
-            // Main Control Button - Centered
+            // FIXED: Removed _isInitialLoad from condition
             SizedBox(
               width: 200,
               height: 60,
               child: ElevatedButton(
                 onPressed:
-                    (_isControlling || _isUpdating) // Disable if updating
+                    (_isUpdating || householdUid == null || !_deviceConnected)
                     ? null
                     : _toggleDevice,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _isUpdating
-                      ? Colors
-                            .grey // Show grey when loading
-                      : _getButtonColor(),
+                  backgroundColor: _getButtonColor(),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(15),
                   ),
                   elevation: 4,
-                  shadowColor: _isUpdating
-                      ? Colors.grey.withOpacity(0.5)
-                      : _getButtonColor().withOpacity(0.5),
+                  shadowColor: _getButtonColor().withOpacity(0.5),
                 ),
                 child: _isUpdating
                     ? const SizedBox(
@@ -670,7 +691,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
             const SizedBox(height: 20),
 
-            // Schedule Button - Centered with icon
             Card(
               color: const Color(0xFF1C2233),
               margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -680,8 +700,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
               child: ListTile(
                 leading: const Icon(
                   Icons.calendar_month,
-                  color: Colors
-                      .blueAccent, // Always blue, not affected by connection status
+                  color: Colors.blueAccent,
                 ),
                 title: const Text(
                   "Schedules",
@@ -699,9 +718,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                   color: Colors.blueAccent,
                   size: 16,
                 ),
-                onTap:
-                    (householdUid == null ||
-                        _isControlling) // Only check household and controlling status
+                onTap: (householdUid == null)
                     ? null
                     : () {
                         Navigator.push(

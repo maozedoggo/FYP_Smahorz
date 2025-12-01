@@ -297,7 +297,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: _activities.isEmpty
                           ? Container(
                               height: 60, // Minimum height to match activity items
-                              alignment: Alignment.centerLeft,
+                              alignment: Alignment.center,
                               child: const Text(
                                 "No recent activity",
                                 style: TextStyle(
