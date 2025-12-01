@@ -241,46 +241,6 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
     }
   }
 
-  Future<void> _finalizeVotes() async {
-    if (!mounted) return;
-    setState(() => _submitting = true);
-
-    try {
-      await _maybePromoteIfMajority();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error finalizing: $e")));
-      }
-    }
-
-    if (mounted) setState(() => _submitting = false);
-  }
-
-  Future<void> _clearVotes() async {
-    if (_householdRef == null) return;
-    if (!mounted) return;
-    setState(() => _submitting = true);
-
-    try {
-      await _householdRef!.update({'votes': {}});
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Votes cleared.")));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error clearing votes: $e")));
-      }
-    }
-
-    if (mounted) setState(() => _submitting = false);
-  }
-
   Map<String, int> _computeCounts() {
     final Map<String, int> counts = {};
     for (var c in _votes.values) {
@@ -428,14 +388,6 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
                       : const Text("Vote / Change Vote", style: TextStyle(color: Colors.white),),
                 ),
               ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: _maybePromoteIfMajority,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey.shade800,
-                ),
-                child: const Text("Tally", style: TextStyle(color: Colors.white),),
-              ),
             ],
           ),
 
@@ -444,36 +396,6 @@ class _HouseholdVotingManagerState extends State<HouseholdVotingManager> {
             "Majority needed: $majority vote(s)",
             style: themeText.copyWith(color: Colors.white70),
           ),
-          const SizedBox(height: 8),
-
-          if (_isAdminUser) ...[
-            const Divider(color: Colors.grey),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.check),
-                    label: const Text("Finalize (promote if majority)"),
-                    onPressed: _submitting ? null : _finalizeVotes,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.clear),
-                    label: const Text("Clear Votes"),
-                    onPressed: _submitting ? null : _clearVotes,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
       ),
     );
