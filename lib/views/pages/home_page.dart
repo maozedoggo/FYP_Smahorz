@@ -24,7 +24,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with RouteAware {
+class _HomePageState extends State<HomePage> {
   // ===========================================================================
   // DEPENDENCIES & SERVICES
   // ===========================================================================
@@ -63,6 +63,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
   bool _isSwitchDebounced = false;
   Timer? _debounceTimer;
 
+  // ADD THIS: Keep track of scroll position
+  final ScrollController _scrollController = ScrollController();
+
   // ===========================================================================
   // LIFECYCLE METHODS
   // ===========================================================================
@@ -71,34 +74,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
     super.initState();
     _initializeApp();
     _setupPeriodicWeatherChecks();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
-  }
-
-  @override
-  void didPopNext() {
-    // Called when returning to this page from another page
-    _refreshHomeData();
-    super.didPopNext();
-  }
-
-  @override
-  void didPush() {
-    // Called when this page is first shown or brought to front
-    _refreshHomeData();
-    super.didPush();
-  }
-
-  void _refreshHomeData() {
-    if (mounted) {
-      print("Refreshing home page data...");
-      _loadWeather();
-      _loadUserDevices();
-    }
   }
 
   void _setupPeriodicWeatherChecks() {
@@ -128,14 +103,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
   void dispose() {
     _weatherCheckTimer?.cancel();
     _debounceTimer?.cancel();
+    _scrollController.dispose(); // Dispose scroll controller
     for (final sub in _deviceSubscriptions.values) {
       sub.cancel();
     }
     _deviceSubscriptions.clear();
 
-    try {
-      routeObserver.unsubscribe(this);
-    } catch (_) {}
     super.dispose();
   }
 
@@ -629,9 +602,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
       print("⚡ Switch debounced, ignoring rapid toggle");
       return;
     }
-    
+
     _isSwitchDebounced = true;
-    
+
     // Reset debounce after 500ms
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 500), () {
@@ -875,17 +848,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
       if (type.contains('parcel')) {
         if (index == currentIndex) {
-          return _buildParcelDoorCard(
-            device,
-            deviceStatus,
-            true,
-          );
+          return _buildParcelDoorCard(device, deviceStatus, true);
         } else if (index == currentIndex + 1) {
-          return _buildParcelDoorCard(
-            device,
-            deviceStatus,
-            false,
-          );
+          return _buildParcelDoorCard(device, deviceStatus, false);
         }
         currentIndex += 2;
       } else {
@@ -1027,24 +992,37 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   // ===========================================================================
-  // NAVIGATION HELPER METHODS
+  // NAVIGATION HELPER METHODS - FIXED
   // ===========================================================================
   Future<void> _navigateToPage(Widget page) async {
     _drawerController.hideDrawer();
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
-    if (mounted) await _loadUserDevices();
+    // Use push with maintainState: true to prevent page reset
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => page,
+        fullscreenDialog: false,
+        maintainState: true,
+      ),
+    );
+    // REMOVED: Don't reload devices when returning from profile/settings
   }
 
   Future<void> _navigateToDevicePage(Map<String, dynamic> dev) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => _pageForDevice(dev)),
+      MaterialPageRoute(
+        builder: (_) => _pageForDevice(dev),
+        fullscreenDialog: false,
+        maintainState: true,
+      ),
     );
+    // Keep this reload for device control page as device states might change
     if (mounted) await _loadUserDevices();
   }
 
   // ===========================================================================
-  // BUILD METHOD
+  // BUILD METHOD - UPDATED WITH SCROLL CONTROLLER
   // ===========================================================================
   @override
   Widget build(BuildContext context) {
@@ -1409,7 +1387,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                         ),
                       ),
 
-                      // DEVICES GRID
+                      // DEVICES GRID - UPDATED WITH SCROLL CONTROLLER
                       Expanded(
                         child: RefreshIndicator(
                           onRefresh: () async {
@@ -1444,6 +1422,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                               }
 
                               return GridView.builder(
+                                controller: _scrollController, // Add scroll controller
                                 padding: EdgeInsets.symmetric(
                                   horizontal: horizontalPadding,
                                 ),
@@ -1456,7 +1435,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
                                       crossAxisSpacing: screenWidth * 0.03,
                                     ),
                                 itemBuilder: (context, index) {
-                                  final deviceCard = _getDeviceCardAtIndex(index);
+                                  final deviceCard = _getDeviceCardAtIndex(
+                                    index,
+                                  );
                                   return deviceCard;
                                 },
                               );
