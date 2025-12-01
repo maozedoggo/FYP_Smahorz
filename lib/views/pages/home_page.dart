@@ -484,31 +484,61 @@ class _HomePageState extends State<HomePage> with RouteAware {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Add New Device'),
+          backgroundColor: Colors.black87, // darker dialog to match theme
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          title: const Text(
+            'Add New Device',
+            style: TextStyle(color: Colors.white),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Enter your Device ID:'),
+              const Text(
+                'Enter your Device ID:',
+                style: TextStyle(color: Colors.white70),
+              ),
               const SizedBox(height: 10),
               TextField(
                 controller: controller,
                 decoration: const InputDecoration(
                   hintText: 'Device ID',
+                  hintStyle: TextStyle(color: Colors.white54),
                   border: OutlineInputBorder(),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white38),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.blueAccent),
+                  ),
                 ),
+                style: const TextStyle(color: Colors.white),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, null),
-              child: const Text('Cancel'),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white70),
+              ),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+              ),
               onPressed: () => Navigator.pop(context, "scan"),
-              child: const Text('Scan QR'),
+              child: const Text(
+                'Scan QR',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+              ),
               onPressed: () {
                 final id = controller.text.trim();
                 if (id.isEmpty) {
@@ -519,7 +549,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 }
                 Navigator.pop(context, id);
               },
-              child: const Text('Add Device'),
+              child: const Text(
+                'Add Device',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         );

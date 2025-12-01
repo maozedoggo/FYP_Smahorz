@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:smart_horizon_home/views/pages/settings-page/edit_address_page.dart';
+import 'package:smart_horizon_home/views/pages/settings-page/members_profile_admin.dart';
 import 'household_voting.dart';
 
 /// Redesigned SettingsPage (dark theme + card UI)
@@ -236,6 +237,18 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
 
+      // Extract address fields from user document
+      final addressData = {
+        'addressLine1': udata?['addressLine1'] ?? '',
+        'addressLine2': udata?['addressLine2'] ?? '',
+        'district': udata?['district'] ?? '',
+        'state': udata?['state'] ?? '',
+        'postalCode': udata?['postalCode'] ?? '',
+      };
+
+      // Debug print to check what address data we have
+      debugPrint('Address data to add to household: $addressData');
+
       final householdRef = await _fire.collection('households').add({
         'name': name,
         'ownerId': currentEmail,
@@ -243,13 +256,21 @@ class _SettingsPageState extends State<SettingsPage> {
         // Do NOT auto-assign admin role to creator. Admins are chosen by vote.
         'admins': [],
         'createdAt': FieldValue.serverTimestamp(),
+        // Add address fields directly (not using spread operator)
+        'addressLine1': addressData['addressLine1'],
+        'addressLine2': addressData['addressLine2'],
+        'district': addressData['district'],
+        'state': addressData['state'],
+        'postalCode': addressData['postalCode'],
       });
 
       await currentUserDocRef!.set({
         'householdId': householdRef.id,
         'role': 'owner',
       }, SetOptions(merge: true));
+
       await _loadData();
+
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Household created.")));
@@ -390,9 +411,18 @@ class _SettingsPageState extends State<SettingsPage> {
   // ---------- Remove member ----------
   Future<void> _removeMember(String email) async {
     if (householdDocRef == null) return;
-    // Only admins can remove members.
+
+    // Only admins (not owners) can remove members
     if (userRole != 'admin') {
       _showInfo("Only household admins can remove members.");
+      return;
+    }
+
+    // Check if trying to remove an owner
+    final memberDoc = await _fire.collection('users').doc(email).get();
+    final memberRole = memberDoc.data()?['role'];
+    if (memberRole == 'owner') {
+      _showInfo("Cannot remove the household owner.");
       return;
     }
     // admins manage membership, including removing any member (owner remains a passive role).
@@ -603,10 +633,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     const SizedBox(height: 4),
                     Text(
                       householdAddressText,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -694,7 +721,10 @@ class _SettingsPageState extends State<SettingsPage> {
             enabled: false,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.home, color: Color.fromRGBO(170, 170, 170, 1)),
+              prefixIcon: const Icon(
+                Icons.home,
+                color: Color.fromRGBO(170, 170, 170, 1),
+              ),
               labelText: "Household Name",
               labelStyle: TextStyle(color: Colors.grey.shade300),
               filled: true,
@@ -711,7 +741,10 @@ class _SettingsPageState extends State<SettingsPage> {
             style: const TextStyle(color: Colors.white),
             maxLines: 2,
             decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.location_on, color: Color.fromRGBO(170, 170, 170, 1),),
+              prefixIcon: const Icon(
+                Icons.location_on,
+                color: Color.fromRGBO(170, 170, 170, 1),
+              ),
               labelText: "Address",
               labelStyle: TextStyle(color: Colors.grey.shade300),
               filled: true,
@@ -793,6 +826,8 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // In your SettingsPage file, update the _memberTileWidget method:
+
   Widget _memberTileWidget(String email) {
     return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       future: _fire.collection('users').doc(email).get(),
@@ -802,6 +837,10 @@ class _SettingsPageState extends State<SettingsPage> {
         final role =
             data?['role'] ?? (adminEmails.contains(email) ? 'admin' : 'member');
         final isCurrentUser = email == currentEmail;
+
+        // Check if viewer is admin (not owner or regular member)
+        final canViewProfile =
+            userRole == 'admin' && role != 'owner' && !isCurrentUser;
 
         return Container(
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -858,10 +897,19 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                   const SizedBox(height: 6),
-                  if (_isAdmin && !isCurrentUser)
+                  if (canViewProfile) // Only show buttons if admin viewing non-owner, non-self
                     Row(
                       children: [
-                        // Remove
+                        // View Profile Button
+                        IconButton(
+                          icon: const Icon(
+                            Icons.person_outline,
+                            color: Colors.blueAccent,
+                          ),
+                          onPressed: () => _viewMemberProfile(email),
+                          tooltip: "View Profile",
+                        ),
+                        // Remove button
                         IconButton(
                           icon: const Icon(
                             Icons.delete_outline,
@@ -878,6 +926,14 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         );
       },
+    );
+  }
+
+  // ADDED: Function to navigate to member profile page
+  Future<void> _viewMemberProfile(String email) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => MemberProfilePage(memberEmail: email)),
     );
   }
 

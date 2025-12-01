@@ -68,12 +68,14 @@ class CreateAccountState extends State<CreateAccount> {
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
+        backgroundColor: Colors.black87, // darker dialog to match theme
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        content: Text(message, style: const TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
+            child: const Text("OK", style: TextStyle(color: Colors.blueAccent)),
           ),
         ],
       ),
@@ -156,10 +158,10 @@ class CreateAccountState extends State<CreateAccount> {
           });
 
       Navigator.pop(context); // Close loading
-      
+
       // Show success dialog
       await _showPopup('Success', 'Account created successfully!');
-      
+
       // Navigate to login page after dialog is closed
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(

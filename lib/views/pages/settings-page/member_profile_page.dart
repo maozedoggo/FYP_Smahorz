@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 class MemberProfilePage extends StatefulWidget {
   final String memberId; // Firestore document id (email) of the member
 
-  const MemberProfilePage({super.key, required this.memberId});
+  const MemberProfilePage({super.key, required this.memberId, required String memberEmail});
 
   @override
   State<MemberProfilePage> createState() => _MemberProfilePageState();
