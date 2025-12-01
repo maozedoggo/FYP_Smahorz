@@ -43,8 +43,9 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   StreamSubscription<DatabaseEvent>? _parcelOutsideSubscription;
   StreamSubscription<DatabaseEvent>? _connectionStatusSubscription;
 
-  bool _deviceConnected = false;
+  bool _deviceConnected = true;
   bool _isInitialLoad = true;
+  bool _hasLoadedInitialStatus = false; // Track if we've loaded initial Firestore status
 
   // ===========================================================================
   // LIFECYCLE METHODS
@@ -53,15 +54,6 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   void initState() {
     super.initState();
     _loadHouseholdUid();
-
-    // Reduced initial load time to 1 second for better UX
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
-        setState(() {
-          _isInitialLoad = false;
-        });
-      }
-    });
   }
 
   @override
@@ -159,15 +151,15 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                 final data = event.snapshot.value;
                 final bool isOn = data == true;
 
-                // Only update if not currently performing a user action
-                if (!_isUpdating) {
+                // Only update if we've loaded initial status from Firestore
+                // AND we're not currently performing a user action
+                if (_hasLoadedInitialStatus && !_isUpdating) {
                   setState(() {
                     _deviceStatus = isOn;
                     _displayedStatus = isOn;
                   });
+                  print("DeviceControlPage update: ${widget.deviceId} = $isOn");
                 }
-
-                print("DeviceControlPage update: ${widget.deviceId} = $isOn");
               }
             },
             onError: (error) {
@@ -178,9 +170,9 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   }
 
   void _updateParcelStatus(bool status, bool isInside) {
-    // Only update if not currently performing a user action
-    if (_isUpdating) return;
-
+    // Only update if we've loaded initial status AND not currently performing a user action
+    if (!_hasLoadedInitialStatus || _isUpdating) return;
+    
     setState(() {
       if (_deviceStatus is! Map) {
         _deviceStatus = {'insideStatus': false, 'outsideStatus': false};
@@ -205,7 +197,19 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
   // DEVICE CONTROL METHODS
   // ===========================================================================
   Future<void> _toggleDevice() async {
-    if (_isUpdating || householdUid == null || !_deviceConnected) {
+    // Only prevent clicks during update
+    if (_isUpdating) {
+      return;
+    }
+    
+    // Check if household data is loaded
+    if (householdUid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Loading household data..."),
+          duration: Duration(seconds: 1),
+        ),
+      );
       return;
     }
 
@@ -215,7 +219,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
     try {
       setState(() {
         _isUpdating = true;
-
+        
         // IMMEDIATELY update displayed status for instant UI feedback
         final deviceType = widget.deviceType.toLowerCase();
         if (deviceType.contains('parcel')) {
@@ -228,7 +232,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
           final newState = !(currentInside || currentOutside);
           _displayedStatus = {
             'insideStatus': newState,
-            'outsideStatus': newState,
+            'outsideStatus': newState
           };
         } else {
           _displayedStatus = !(_displayedStatus == true);
@@ -254,6 +258,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       });
 
       print("✓ DeviceControlPage successfully updated device");
+
     } catch (error) {
       print("✗ Error controlling device: $error");
 
@@ -465,12 +470,19 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
             _deviceStatus = status == true;
             _displayedStatus = _deviceStatus;
           }
+          
+          // Mark that we've loaded the initial status
+          _hasLoadedInitialStatus = true;
         });
 
         print("Loaded initial device status: $_deviceStatus");
       }
     } catch (e) {
       print("Error loading initial device status: $e");
+      // Even on error, mark as loaded to allow realtime updates
+      setState(() {
+        _hasLoadedInitialStatus = true;
+      });
     }
   }
 
@@ -513,7 +525,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
   Color _getButtonColor() {
     if (_isUpdating) return Colors.grey;
-
+    
     final deviceType = widget.deviceType.toLowerCase();
 
     if (deviceType.contains('parcel')) {
@@ -650,24 +662,21 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
 
             const SizedBox(height: 20),
 
-            // FIXED: Removed _isInitialLoad from condition
+            // Main Control Button with loading state for initial load
             SizedBox(
               width: 200,
               height: 60,
               child: ElevatedButton(
-                onPressed:
-                    (_isUpdating || householdUid == null || !_deviceConnected)
-                    ? null
-                    : _toggleDevice,
+                onPressed: (_isUpdating || !_hasLoadedInitialStatus) ? null : _toggleDevice,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _getButtonColor(),
+                  backgroundColor: !_hasLoadedInitialStatus ? Colors.grey : _getButtonColor(),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(15),
                   ),
                   elevation: 4,
                   shadowColor: _getButtonColor().withOpacity(0.5),
                 ),
-                child: _isUpdating
+                child: (_isUpdating || !_hasLoadedInitialStatus)
                     ? const SizedBox(
                         width: 20,
                         height: 20,
@@ -718,7 +727,8 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
                   color: Colors.blueAccent,
                   size: 16,
                 ),
-                onTap: (householdUid == null)
+                onTap:
+                    (householdUid == null)
                     ? null
                     : () {
                         Navigator.push(
