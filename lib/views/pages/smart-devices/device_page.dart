@@ -501,7 +501,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       final outside = _displayedStatus is Map
           ? _displayedStatus['outsideStatus'] ?? false
           : false;
-      return 'In: ${inside ? "Open" : "Closed"}, Out: ${outside ? "Open" : "Closed"}';
+      return 'In: ${inside ? "Lock" : "Unlock"}, Out: ${outside ? "Lock" : "Unlock"}';
     }
     return _displayedStatus == true ? "On" : "Off";
   }
@@ -518,7 +518,7 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       final outside = _displayedStatus is Map
           ? _displayedStatus['outsideStatus'] ?? false
           : false;
-      return (inside || outside) ? "CLOSE ALL" : "OPEN ALL";
+      return (inside || outside) ? "Unlock All" : "Lock All";
     }
     return _displayedStatus == true ? "TURN OFF" : "TURN ON";
   }
@@ -535,9 +535,9 @@ class _DeviceControlPageState extends State<DeviceControlPage> {
       final outside = _displayedStatus is Map
           ? _displayedStatus['outsideStatus'] ?? false
           : false;
-      return (inside || outside) ? Colors.redAccent : Colors.green;
+      return (inside || outside) ? Colors.green : Colors.redAccent;
     }
-    return _displayedStatus == true ? Colors.redAccent : Colors.green;
+    return _displayedStatus == true ? Colors.green : Colors.redAccent;
   }
 
   String _getDeviceIcon() {
